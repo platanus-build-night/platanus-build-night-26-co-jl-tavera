@@ -1,0 +1,252 @@
+# Fuentes
+
+Todas las cifras del [README](../README.md) salen de aquí. Cada enlace lleva anotado **qué
+dato aporta**, para que cualquier número del README se pueda rastrear hasta su fuente sin
+tener que abrir los 90 enlaces.
+
+Los datos de producto —columnas, cortes y trampas de parseo de SISMED e INVIMA— están en
+[`raw/README.md`](../raw/README.md), no acá.
+
+---
+
+# Fuentes primarias e institucionales
+
+## Defensoría del Pueblo
+
+Es la fuente del bloque más importante: la encuesta en puntos de dispensación (n=3.449) y
+la serie histórica de tutelas en salud.
+
+- Informe Defensorial de Salud 2025 — *Medicamentos inaccesibles, derechos vulnerados: un análisis con enfoque territorial en Colombia*. **Fuente del 90 % de pacientes sin entrega completa, los 584 medicamentos y el 48 % de casos sin resolver.**
+  https://www.defensoria.gov.co/-/defensoria-alerta-crisis-acceso-medicamentos-colombia
+- Convocatoria y presentación del informe:
+  https://www.defensoria.gov.co/-/defensoria-informe-salud-medicamentos-inaccesibles
+- Informe de tutelas en salud (FILBo 2026) — **serie histórica y tasa de concesión del 74,3 %**:
+  https://www.defensoria.gov.co/-/tutelas-para-invocar-la-proteccion-del-derecho-a-la-salud
+- Entrevista a la Defensora sobre la crisis de medicamentos:
+  https://www.defensoria.gov.co/en/-/entrevista-a-la-defensora-del-pueblo-sobre-la-crisis-de-medicamentos-en-el-pa%C3%ADs
+- Rendición de cuentas — consolidación del informe:
+  https://www.defensoria.gov.co/-/defensoria-del-pueblo-rindio-cuentas-a-la-ciudadania-gestion-transparencia-y-decisiones-impostergables-para-la-garantia-de-los-derechos
+
+## INVIMA — desabastecimiento
+
+Fuente del pilar 2. El listado es **mensual**, así que el enlace del portal cambia de
+contenido; el corte congelado que usa Curuba está en `raw/invima/`.
+
+- Portal de desabastecimientos (listados mensuales):
+  https://www.invima.gov.co/productos-vigilados/medicamentos-y-productos-biologicos/desabastecimientos
+- Listado enero 2025 (PDF) — **incluye las definiciones de los seis estados de la clasificación**:
+  https://www.invima.gov.co/sites/default/files/medicamentos-productos-biologicos/Desabastecimientos/2025/listado_abastecimiento_y_desabastecimiento_medicamentos_enero_de_2025_-_publicado.pdf
+- Listado agosto 2025 (PDF):
+  https://www.invima.gov.co/sites/default/files/medicamentos-productos-biologicos/Desabastecimientos/2025/listado_abastecimiento_y_desabastecimiento_medicamentos_agosto_de_2025_-_30_sep.pdf
+- Listado enero 2026:
+  https://www.invima.gov.co/biblioteca/listado-de-abastecimiento-y-desabastecimiento-de-medicamentos-en-seguimiento-enero-2026pdf
+- Listado 2026 consolidado (vía Minsalud, PDF):
+  https://www.minsalud.gov.co/sites/rid/Lists/BibliotecaDigital/RIDE/VS/MET/listado-abastecimiento-desabastecimiento-medicamentos-2026.pdf
+- Listado enero 2025 (biblioteca INVIMA):
+  https://www.invima.gov.co/biblioteca/listado-abastecimiento-desabastecimiento-medicamentos-enero-2025
+- Minsalud — Abastecimiento de medicamentos:
+  https://www.minsalud.gov.co/salud/MT/paginas/desabastecimiento.aspx
+- SaluData (Observatorio de Salud de Bogotá) — indicador de desabastecimiento:
+  https://saludata.saludcapital.gov.co/osb/indicadores/desabastecimiento-medicamentos/
+- SaluData — **explicación de las clasificaciones del INVIMA**:
+  https://saludata.saludcapital.gov.co/osb/consulta-la-nueva-actualizacion-del-listado-de-abastecimiento-y-desabastecimiento-de-medicamentos-del-invima/
+
+## SISMED y precios de medicamentos
+
+Fuente del pilar 1. Lo que publica es un **techo regulado**, no un precio observado — la
+distinción está desarrollada en [`raw/README.md`](../raw/README.md).
+
+- Datos Abiertos Colombia — Precios de Medicamentos (**el CSV que carga el ETL**):
+  https://www.datos.gov.co/Salud-y-Protecci-n-Social/Precios-Medicamentos/3t73-n4q9
+- Datos Abiertos Colombia — Consulta pública de precios:
+  https://www.datos.gov.co/Salud-y-Protecci-n-Social/Consulta-p-blica-de-Precios-de-Medicamentos/3he6-m866
+- Minsalud — Sistema de Información de Precios de Medicamentos (SISMED):
+  https://www.minsalud.gov.co/proteccionsocial/Paginas/Sistema%20de%20Informaci%C3%B3n%20de%20Precios%20de%20Medicamentos.aspx
+- Minsalud — Regulación de precios (listado de precios máximos vigente, SISMED trimestral):
+  https://www.minsalud.gov.co/salud/medicamentos-y-tecnologias/Paginas/medicamentos-regulacion-precios.aspx
+- SISPRO — SISMED:
+  https://www.sispro.gov.co/central-prestadores-de-servicios/Pages/SISMED-Sistema-de-Informacion-de-Precios-de-Medicamentos.aspx
+- SISPRO — Consulta pública de precios en la cadena de comercialización (Circular 2 de 2012):
+  https://web.sispro.gov.co/WebPublico/Consultas/ConsultarCNPMCadenaComercializacionCircu2yPA_028_2_2.aspx
+- ABECÉ SISMED — guía de reporte (PDF):
+  https://www.med-informatica.com/OBSERVAMED/SISMED/abece-sismed.pdf
+- Neuroeconomix — **dispersión de precios en mercados no regulados** y rol de la CNPMDM:
+  https://neuroeconomix.com/en/regulacion-de-precios-herramienta-propuesta-por-el-sistema-de-salud-para-controlar-el-gasto/
+
+## Marco legal de la tutela
+
+Fuente del pilar 3: los plazos (fallo en 10 días, cumplimiento en 48 horas) y la ausencia
+de formalidades.
+
+- Decreto 2591 de 1991 — Secretaría del Senado (texto vigente con control de constitucionalidad). **Art. 29: plazo de fallo. Art. 17: rechazo por defectos en la solicitud.**
+  http://www.secretariasenado.gov.co/senado/basedoc/decreto_2591_1991.html
+- Decreto 2591 de 1991 — Gestor Normativo, Función Pública:
+  https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=5304
+- Decreto 2591 de 1991 — PDF (Minsalud):
+  https://www.minsalud.gov.co/sites/rid/Lists/BibliotecaDigital/RIDE/INEC/IGUB/decreto-2591-de-1991.pdf
+- Características y procedimiento de la acción de tutela — **plazo de cumplimiento de 48 horas e impugnación**:
+  https://www.gerencie.com/principales-caracteristicas-de-la-accion-de-tutela.html
+
+## Procedibilidad y causales de improcedencia (jurisprudencia)
+
+Estas seis sentencias son las que sostienen la tabla de causales del README. Son el
+insumo de las preguntas que hace el agente **antes** de generar el PDF.
+
+- **Sentencia SU-508 de 2020** — Subsidiariedad: agotar la función jurisdiccional de la Supersalud **no es requisito ineludible**; el juez no puede declarar la improcedencia automáticamente y debe verificar idoneidad, eficacia y si el accionante es sujeto de especial protección:
+  https://www.corteconstitucional.gov.co/relatoria/2020/SU508-20.htm
+- **Sentencia T-343 de 2025** — Legitimación por activa; la Supersalud **no tiene competencia cuando hay omisión o silencio de la EPS** ni resulta eficaz frente a agente oficioso; modalidades de carencia actual de objeto:
+  https://www.corteconstitucional.gov.co/relatoria/2025/t-343-25.htm
+- **Sentencia T-313 de 2018** — Carácter **excepcional** del rechazo (art. 17): el juez debe pedir corrección en 3 días y agotar sus poderes oficiosos antes de rechazar:
+  https://www.corteconstitucional.gov.co/relatoria/2018/t-313-18.htm
+- **Sentencia T-038 de 2019** — Configuración de la carencia actual de objeto por **hecho superado**:
+  https://www.corteconstitucional.gov.co/relatoria/2019/T-038-19.htm
+- **Sentencia T-195 de 2021** — Caso de no entrega de medicamentos (insulina, losartán) con **orden de entrega en 48 horas** y hecho superado parcial:
+  https://normas.cra.gov.co/gestor/docs/t-195_2021.htm
+- **Sentencia T-008 de 2025** — Hecho superado por prestación del servicio y carencia actual de objeto por situación sobreviniente:
+  https://www.corteconstitucional.gov.co/relatoria/2025/t-008-25.htm
+- Análisis (dic. 2025) — la Corte reitera los **límites al rechazo** de tutelas en salud:
+  https://prime.tirant.com/co/actualidad-prime/corte-constitucional-reitero-limites-al-rechazo-de-tutelas-y-advirtio-barreras-indebidas-en-la-atencion-en-salud-de-personas-privadas-de-la-libertad/
+- Infobae — límites para rechazar tutelas por requisitos formales:
+  https://www.infobae.com/colombia/2025/12/16/corte-constitucional-fijo-los-limites-para-rechazar-tutelas-a-personas-privadas-de-la-libertad-en-casos-de-salud/
+
+## Informes anuales de tutela en salud (serie histórica)
+
+- El Tiempo — **desglose de fallos del registro de la Corte: 80 % concedidas, 4,2 % parciales, 15,8 % negadas / rechazadas / improcedentes**. Es una medición distinta a la tasa de concesión del 74,3 % de la Defensoría; el README las presenta separadas por eso.
+  https://www.eltiempo.com/justicia/cortes/tutelas-por-la-violacion-del-derecho-a-la-salud-en-la-corte-constitucional-483164
+- Defensoría — *La tutela y los derechos a la salud y a la seguridad social*, 14ª edición:
+  https://www.defensoria.gov.co/-/la-tutela-y-los-derechos-a-la-salud-y-a-la-seguridad-social-14%C2%B0-edici%C3%B3n
+- Defensoría — Informe 2021 (16ª edición, repositorio con PDF):
+  https://repositorio.defensoria.gov.co/items/24a813da-7ebb-47f9-aca3-58b73b2e6400
+- Defensoría — Informe 2023 (repositorio):
+  https://repositorio.defensoria.gov.co/items/42d74830-83a8-4efb-bf7c-3bc832476a9a/full
+- Defensoría — 198.000 tutelas en 2023 y patologías más frecuentes:
+  https://www.defensoria.gov.co/en/-/por-vulneraci%C3%B3n-del-derecho-a-la-salud-los-colombianos-presentaron-cerca-de-198.000-tutelas-durante-el-2023
+- Ámbito Jurídico — Informe 2018: negación de tecnologías **ya incluidas en el PBS**:
+  https://www.ambitojuridico.com/noticias/general/administrativo-y-contratacion/defensoria-del-pueblo-revela-cifras-de-tutela-y
+- El Tiempo — Informe 2020: **89,03 % de las negaciones eran de servicios ya incluidos en el PBS**:
+  https://www.eltiempo.com/salud/tutelas-por-el-derecho-a-la-salud-informe-de-la-defensoria-del-pueblo-638692
+- Así Vamos en Salud — Informe 2013: los medicamentos concentraron el **59,65 % de las negaciones**:
+  https://www.asivamosensalud.org/actualidad/defensoria-presenta-informe-la-tutela-y-los-derechos-la-salud-y-la-seguridad-social-2013
+- El País — la tasa de tutelas pasó de 3,04 a 4,75 por cada 1.000 afiliados (2022–2024):
+  https://www.elpais.com.co/colombia/tutelas-por-salud-se-disparan-en-colombia-corte-constitucional-alerta-crisis-0353.html
+- ConsultorSalud — Auto 1280 de 2025: bajo cumplimiento en la medición de tutelas, +150 % en tres años:
+  https://consultorsalud.com/corte-bajo-cumplimiento-tutelas-en-salud/
+
+## Estudios y gasto de bolsillo
+
+- Afidro / Algebra Labs — *Gasto de bolsillo y barreras de atención en salud 2019–2025* (PDF, **fuente original del +57,3 %, del corte rural/urbano y del desglose por ingresos**):
+  https://afidro.org/wp-content/uploads/2026/04/Gasto-de-bolsillo-y-barreras-de-atencion-en-Salud-2019%E2%80%932025-.pdf
+- CEPAL — Análisis comparativo de los precios de los medicamentos en América Latina:
+  https://repositorio.cepal.org/bitstreams/0ecc4046-2e6a-4d68-b0c1-e2a9a2d043ee/download
+
+---
+
+# Cobertura de prensa
+
+Sirve para dos cosas: confirmar cifras que están en informes en PDF, y fechar cuándo se
+hizo público cada dato.
+
+## Tutelas en salud
+
+- El Espectador — las tutelas en salud aumentaron 17,92 % en 2025:
+  https://www.elespectador.com/salud/tutelas-en-salud-aumentaron-en-un-1792-en-2025-defensoria/
+- El País — **312.500 tutelas en 2025**:
+  https://www.elpais.com.co/colombia/defensoria-alerta-por-aumento-de-tutelas-en-salud-en-18-312500-se-presentaron-en-2025-2304.html
+- Semana — aumento del 18 % y fallas estructurales:
+  https://www.semana.com/politica/articulo/defensoria-del-pueblo-alerta-sobre-el-aumento-de-18-de-las-tutelas-por-salud-en-colombia-y-evidencia-fallas-estructurales-del-sistema/202615/
+- El Colombiano — **serie histórica 2020–2025** y quejas ante Supersalud:
+  https://www.elcolombiano.com/colombia/salud/tutelas-salud-subieron-342024-subir-182025-defensoria-OP30592419
+- El Colombiano — "sin tutela no atienden":
+  https://www.elcolombiano.com/inicio/tutelas-salud-colombia-aumento-2025-defensoria-MP35811805
+- ConsultorSalud — Defensoría alerta por aumento de tutelas:
+  https://consultorsalud.com/defensoria-alerta-por-aumento-de-tutelas-salud/
+- Qhubo — las tutelas por salud incrementaron 18 %:
+  https://www.qhubobogota.com/asi-paso/tutelas-salud-incremento/
+- Colombia.com — las tutelas rompen récords:
+  https://www.colombia.com/actualidad/nacionales/tutelas-por-salud-en-instauradas-en-colombia-alcanzan-cifras-historicas-578778
+
+## Acceso a medicamentos
+
+- Infobae — **36,82 % de tutelas por entrega inoportuna** y 18.451 tutelas acompañadas:
+  https://www.infobae.com/colombia/2025/11/05/defensoria-del-pueblo-expuso-las-graves-barreras-de-acceso-a-medicamentos-que-enfrentan-miles-de-pacientes-en-colombia/
+- ConsultorSalud — **90 % de los pacientes no recibe sus medicamentos**:
+  https://consultorsalud.com/defensoria-del-pueblo-pacientes-medicamentos/
+- El Heraldo — presentación del informe y **encuesta a 3.449 personas**:
+  https://www.elheraldo.co/colombia/2025/11/05/defensoria-presento-informe-sobre-vulneraciones-a-la-salud-en-colombia-recomienda-una-reforma-a-la-salud-consensuada/
+- Asuntos Legales — **584 medicamentos no entregados, 48 % de casos sin resolver, top 3 (metformina, valsartán, losartán)**:
+  https://www.asuntoslegales.com.co/actualidad/defensoria-preve-que-el-ano-finalizara-con-315-000-quejas-por-falta-de-medicamentos-4264026
+- La FM — **685.000 reclamos por medicamentos; la nota reporta un promedio de 1.600 diarios**:
+  https://www.lafm.com.co/sociedad/defensoria-alerta-por-crisis-en-acceso-a-medicamentos-y-vulneracion-del-derecho-a-la-salud-381799
+- Emisora Atlántico — **dato de la ECV DANE 2024: ~40 % sin acceso pleno**:
+  https://emisoraatlantico.com.co/local/defensoria-del-pueblo-alerta-sobre-crisis-en-el-acceso-a-medicamentos-en-colombia/
+- ConsultorSalud — medicamentos desabastecidos y sus causas:
+  https://consultorsalud.com/invima-medicamentos-desabastecidos-en-colombia/
+- ConsultorSalud — el listado del INVIMA reporta escasez:
+  https://consultorsalud.com/listado-invima-reporta-escasez-9-medicamentos/
+
+## Gasto de bolsillo
+
+- Portafolio — el gasto de bolsillo creció 57 % y golpea a hogares pobres y rurales:
+  https://www.portafolio.co/economia/gobierno/gasto-de-bolsillo-en-salud-crecio-57-y-golpea-mas-a-hogares-pobres-y-rurales-en-colombia-493111
+- La Patria — **desglose por ingresos y por zona rural/urbana**:
+  https://www.lapatria.com/salud/aumento-del-gasto-de-bolsillo-en-salud-como-afecta-las-familias-en-colombia-esto-dicen-en
+- La FM — gasto de bolsillo y disponibilidad de medicamentos:
+  https://www.lafm.com.co/sociedad/medicamentos-pacientes-crisis-salud-gastos-informe-hogares-colombianos-398307
+- Telecafé — aumento del 57,3 % en hogares colombianos:
+  https://telecafe.gov.co/gasto-en-salud-de-los-hogares-colombianos-aumento-573-y-afecta-mas-a-los-sectores-de-bajos-ingresos/
+- Portafolio — **$70,2 billones en salud en 2025 (6,9 % del PIB)**:
+  https://www.portafolio.co/economia/gobierno/en-2025-los-hogares-gastaron-10-5-billones-mas-en-salud-que-al-inicio-del-gobierno-petro-488534
+- El Tiempo — gasto en salud de los hogares en 2025:
+  https://www.eltiempo.com/economia/sectores/el-gasto-en-salud-de-los-hogares-colombianos-siguio-creciendo-en-2025-cuanto-destina-cada-hogar-al-ano-3533064
+
+## Supersalud y quejas
+
+- ⚠️ **Contra-evidencia.** El Heraldo, julio 2026 — la Supersalud reporta una
+  **disminución** de quejas por entrega de medicamentos y atención en salud. Va acá a
+  propósito: es el dato que corta en contra de la tesis del README y esconderlo sería
+  peor que citarlo.
+  https://www.elheraldo.co/colombia/2026/07/11/supersalud-reporta-disminucion-de-quejas-por-entrega-de-medicamentos-y-atencion-en-salud/
+- El Colombiano — plan de choque nacional por no entrega de medicamentos:
+  https://www.elcolombiano.com/colombia/salud/supersalud-plan-choque-medicamentos-eps-colombia-CI31391517
+- La FM — más de 514.000 reclamaciones atendidas en 2026:
+  https://lafm.com.co/sociedad/crisis-medicamentos-salud-nueva-eps-supersalud-atencion-medica-quejas-reclamos-394315
+- Vanguardia — medicamentos sin entregar en Nueva EPS:
+  https://www.vanguardia.com/colombia/2026/05/23/supersalud-encontro-mas-medicamentos-sin-entregar-a-usuarios-de-nueva-eps/
+- Infobae — quejas más comunes de los pacientes:
+  https://www.infobae.com/colombia/2025/01/16/conozca-las-quejas-mas-comunes-de-los-pacientes-en-colombia-el-sistema-de-salud-esta-bajo-la-lupa/
+- ConsultorSalud — reclamaciones y PQRS ante la Supersalud:
+  https://consultorsalud.com/reclamaciones-sistema-salud-aumentan-supersalud/
+
+## Canal digital y WhatsApp
+
+Sostienen la decisión de canal: por qué WhatsApp y no una app.
+
+- Aurora Inbox — estadísticas de WhatsApp Business 2026 (**94 % de penetración en Colombia**):
+  https://www.aurorainbox.com/en/2026/03/01/whatsapp-business-2025-statistics/
+- Blip — estadísticas de WhatsApp Business en LATAM 2026 (**62–80 % ya escriben a empresas**):
+  https://www.blip.ai/blog/es/whatsapp/estadisticas-whatsapp-marketing-latam/
+- Branch — situación digital de Colombia 2025 (**41,1 M usuarios de internet, 97,7 % con smartphone**):
+  https://branch.com.co/marketing-digital/situacion-digital-de-colombia-en-el-2025/
+- ITSitio — informe DataReportal Colombia 2025:
+  https://www.itsitio.com/co/informes/informe-datareportal-colombia-2025-como-y-cuanto-usan-los-colombianos-internet-y-redes-sociales/
+- La República — redes sociales más usadas en Colombia:
+  https://www.larepublica.co/internet-economy/whatsapp-facebook-e-instagram-lideran-el-listado-de-redes-sociales-mas-usadas-en-el-pais-4256298
+- Marketing4ecommerce — estado de la conexión a internet en Colombia:
+  https://marketing4ecommerce.co/estado-conexion-a-internet-en-colombia/
+- Portafolio — WhatsApp como canal de comercio en Colombia:
+  https://www.portafolio.co/tecnologia/whatsapp-se-consolida-como-aliado-clave-del-comercio-electronico-en-colombia-segun-informe-de-e-commerce-489757
+
+---
+
+## Dos notas sobre el uso de estas cifras
+
+**Los denominadores no siempre coinciden.** La Defensoría y el registro de la Corte
+Constitucional miden cosas distintas: la primera reporta una tasa de concesión del 74,3 %;
+el segundo desglosa 80 % concedidas, 4,2 % parciales y 15,8 % negadas, rechazadas o
+declaradas improcedentes. El README las presenta como dos mediciones separadas, no como
+una sola.
+
+**Los porcentajes territoriales de la fuente no cuadran con el total anual.** Antioquia
+55.705, Valle del Cauca 27.971 y Bogotá 26.372 se citan como 20,5 %, 10,3 % y 9,7 %, pero
+esos porcentajes implican un total de ~271.700, no los 312.500 de 2025 — probablemente
+son de un corte parcial del año. Por eso el README publica **solo los valores absolutos**.

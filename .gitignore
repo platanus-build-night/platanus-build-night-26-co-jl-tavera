@@ -1,0 +1,24 @@
+# Los datos crudos de SISMED e INVIMA SÍ van al repo (~11 MB): así el ETL es
+# reproducible y el corte queda congelado aunque la fuente lo baje después.
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Entorno
+.env
+.env.local
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+
+# Sistema
+.DS_Store
+Thumbs.db

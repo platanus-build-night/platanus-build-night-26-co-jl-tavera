@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "Bash(uvicorn:*)",
+      "Bash(python -m curuba.etl:*)",
+      "Bash(psql:*)",
+      "Bash(railway:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
