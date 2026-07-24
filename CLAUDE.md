@@ -59,6 +59,19 @@ uv pip compile pyproject.toml -o requirements.txt    # regenerar para Railway
 Para probar el webhook en local hace falta un túnel público (`ngrok http 8000`) y
 apuntar el webhook de Twilio ahí.
 
+## Skills
+
+`.claude/skills/` está commiteado: al clonar ya vienen. Son para `apps/web` —
+`vercel-react-best-practices`, `frontend-design` y los cuatro workflows de Next.js
+(`next-dev-loop` y los de Cache Components / Partial Prefetching). Se instalaron con
+`npx skills add <repo> --skill <nombre> -a claude-code --copy -y` y se actualizan con
+`npx skills update -p`; `skills-lock.json` en la raíz es su manifiesto.
+
+Ojo al agregar más: `--skill '*'` trae también las skills internas del repo fuente. En
+`vercel/next.js` eso son 12 extra para contribuirle a Next.js (`backport-pr`, `v8-jit`,
+`react-vendoring`…) que no tienen nada que ver con este proyecto. Pedir las skills por
+nombre.
+
 ## Tres trampas conocidas
 
 1. **Twilio corta el webhook a los ~15s.** Una corrida del agente con tools se demora
