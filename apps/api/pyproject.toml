@@ -1,0 +1,26 @@
+[project]
+name = "curuba"
+version = "0.1.0"
+description = "Agente de WhatsApp para pacientes en Colombia"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncpg",
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-ai-slim[openrouter]",
+    "pydantic-settings",
+    "twilio",
+    # Sin esto FastAPI no parsea el Form() del webhook y falla al arrancar
+    # con un error que no menciona a Twilio por ningún lado.
+    "python-multipart",
+]
+
+# Las dependencias del ETL van aparte para que Railway no instale pandas
+# en cada deploy. `uv pip compile pyproject.toml` no incluye los extras.
+[project.optional-dependencies]
+etl = ["pandas", "openpyxl"]
+
+# Proyecto virtual: uv instala las dependencias pero no empaqueta `curuba`.
+# Los imports funcionan porque uvicorn corre con `--app-dir src`.
+[tool.uv]
+package = false

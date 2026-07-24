@@ -144,12 +144,24 @@ Esta es la función que decide qué hacer después: **el problema es del país o
 EPS.** Si el medicamento está desabastecido, el reclamo es por la alternativa terapéutica;
 si no lo está, el incumplimiento es de la EPS y ahí la tutela tiene otro peso.
 
-La clasificación del INVIMA tiene seis estados —no desabastecido, en monitorización,
-riesgo de desabastecimiento, desabastecido, temporalmente no comercializado y
-descontinuado—. En el corte que está cargado (mayo 2026) los que aparecen en la práctica
-son **en monitorización** (~421 menciones) y **desabastecido** (~13). Si un medicamento no
-aparece, Curuba lo dice así: que el INVIMA no lo tenga en seguimiento no significa que
-haya stock en tu barrio.
+La clasificación del INVIMA tiene seis estados. El corte cargado (mayo 2026) trae **783
+medicamentos** en cuatro de ellos:
+
+| Estado | Medicamentos |
+|---|---|
+| En monitorización | 389 |
+| No desabastecido *(seguimiento cerrado)* | 373 |
+| Desabastecido | 11 |
+| En riesgo de desabastecimiento | 9 |
+
+Los otros dos —no comercializado y descontinuado— viven en un anexo aparte del PDF y no
+se cargan.
+
+**Que un medicamento aparezca como *no desabastecido* no es lo mismo a que no aparezca.**
+El primero fue objeto de seguimiento y se resolvió; el segundo el INVIMA nunca lo miró.
+Son casi la mitad de las filas y Curuba sostiene la diferencia al responder. Si un
+medicamento no aparece, lo dice así: que el INVIMA no lo tenga en seguimiento no
+significa que haya stock en tu barrio.
 
 ### 3. Tutela
 

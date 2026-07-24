@@ -4,8 +4,11 @@ El servicio que está detrás del número de WhatsApp. Recibe los mensajes que r
 Twilio, corre el agente y responde: cotiza fórmulas contra SISMED, consulta
 desabastecimientos del INVIMA y genera el PDF de una tutela.
 
-> **Estado: sin implementar.** Esta carpeta es el spec. Todo lo que está abajo es lo que
-> hay que construir, no lo que ya existe.
+> **Estado: el esqueleto camina; faltan las tools.** Ya existen `config.py`, `agent.py` y
+> `main.py`: el webhook de Twilio responde, el agente contesta en español por OpenRouter y
+> recuerda el hilo (en RAM, no en Postgres todavía). **Todavía no existen** `db.py`,
+> `tutela.py`, `etl.py`, `schema.sql`, las cuatro tools, `GET /f/{id}` ni la lectura de
+> fotos. Todo lo de abajo sigue siendo el destino, no el estado actual.
 
 **Lo importante de la arquitectura: es un solo agente con cuatro tools, no tres
 endpoints.** WhatsApp es una sola conversación, así que no hay ruteo por palabras clave
@@ -62,7 +65,7 @@ apps/api/
 | Tool | Qué hace |
 |---|---|
 | `buscar_medicamento(nombre)` | Busca en SISMED por similitud y devuelve hasta 8 candidatos con presentación, laboratorio, precio institucional y **score** |
-| `consultar_desabastecimiento(nombre)` | Busca en el seguimiento del INVIMA; devuelve estado (`monitorizacion`, `riesgo`, `desabastecido`) y fecha, o dice explícitamente que no hay reportes |
+| `consultar_desabastecimiento(nombre)` | Busca en el seguimiento del INVIMA; devuelve estado (`monitorizacion`, `riesgo`, `desabastecido`, `no_desabastecido`) y fecha, o dice explícitamente que no hay reportes |
 | `guardar_dato_tutela(campo, valor)` | Guarda una respuesta de la entrevista y devuelve qué campos faltan |
 | `generar_tutela()` | Valida que no falte nada, arma el PDF, lo guarda y devuelve su URL pública |
 
@@ -134,17 +137,33 @@ posición. `Medicamento` varía entre 2 y 6 segmentos: **primero y último, nunc
 
 ### `shortages`
 
+Se carga desde `raw/invima/desabastecimiento.csv` — **783 filas**, ya extraídas del PDF
+(ver [`raw/README.md`](../../raw/README.md)). El ETL no abre PDFs.
+
 La fuente del INVIMA **no trae CUM**, trae ATC — o sea que no se puede unir con
-`medications` por llave; el cruce, si se hace, es por nombre o por ATC.
+`medications` por llave; el cruce, si se hace, es por nombre o por ATC. El `No.` tampoco
+sirve de llave: el PDF renumera desde 1 en cada tabla y además repite tres números.
 
 | Columna | De dónde sale |
 |---|---|
-| `nombre` | `Nombre del Medicamento` (trae la forma pegada: `ACETAMINOFEN + CODEINA TABLETA`) |
-| `atc` | `ATC` |
-| `estado` | `monitorizacion` \| `riesgo` \| `desabastecido` |
-| `fecha_seguimiento` | `Fecha del último seguimiento` |
+| `nombre` | `nombre` (trae la forma y la concentración pegadas: `ACETAMINOFEN + CODEINA TABLETA 325 mg + 30 mg`) |
+| `atc` | `atc`. Ojo: los dos últimos dígitos son opcionales (`V07AB` es válido) |
+| `estado` | `monitorizacion` \| `riesgo` \| `desabastecido` \| `no_desabastecido`. **Nullable**: una fila viene sin estado en la fuente |
+| `fecha_seguimiento` | `fecha_seguimiento`, ya en ISO |
+| `listado` | `activo` \| `cerrado` |
 
 `search_text` sobre `nombre`.
+
+> **`no_desabastecido` son 373 de las 783 filas y no significa "no hay reportes".**
+> Significa que el INVIMA sí le hizo seguimiento y lo cerró. Es información útil para el
+> paciente y es lo contrario de que el medicamento no aparezca en la tabla. Las
+> instrucciones del agente tienen que distinguir los dos casos al responder — es la misma
+> clase de distinción que la de precio institucional vs. precio de mostrador.
+
+Un mismo principio activo aparece varias veces con formas distintas (`ÁCIDO VALPROICO
+CÁPSULA DURA`, `... JARABE`, `... SOLUCIÓN INYECTABLE`): son filas legítimamente
+distintas, así que la tool devuelve varias y deja que el agente escoja, igual que
+`buscar_medicamento`.
 
 **Ojo con `unaccent`:** no es `IMMUTABLE`, así que no se puede usar directo en una columna
 generada. Hay que envolverla:
@@ -259,12 +278,19 @@ dar precio.
 
 ## Datos
 
-Los dos archivos fuente **están en el repo**, en [`raw/`](../../raw/README.md):
+Los archivos fuente **están en el repo**, en [`raw/`](../../raw/README.md):
 
-| Fuente | Archivo | Corte |
-|---|---|---|
-| SISMED | `raw/sismed/Precio_máximo_de_venta_..._20260724.csv` (9,5 MB) | 2026-07-24 |
-| INVIMA | `raw/invima/LISTADO DE ABASTECIMIENTO MAYO 2026.pdf` (1,6 MB) | mayo 2026 |
+| Fuente | Archivo | Qué carga el ETL | Corte |
+|---|---|---|---|
+| SISMED | `raw/sismed/Precio_máximo_de_venta_..._20260724.csv` (9,5 MB) | 38.731 filas | 2026-07-24 |
+| INVIMA | `raw/invima/LISTADO DE ABASTECIMIENTO MAYO 2026.pdf` (1,6 MB) | — | mayo 2026 |
+| INVIMA | `raw/invima/desabastecimiento.csv` (83 KB) | 783 filas | mayo 2026 |
+
+**El ETL lee dos CSV, nunca el PDF.** La extracción es un paso aparte
+(`raw/invima/extraer_invima.py`, con pdfplumber) que ya corrió y dejó su salida
+commiteada. Por eso pdfplumber **no** va en el extra `etl` ni en `requirements.txt`: solo
+haría más lento cada deploy de Railway. Se vuelve a correr cuando el INVIMA publique el
+listado del mes siguiente.
 
 `raw/README.md` tiene el detalle de columnas, las trampas de parseo de cada uno y la
 justificación de por qué se guarda un precio y no otro. **Leerlo antes de escribir el

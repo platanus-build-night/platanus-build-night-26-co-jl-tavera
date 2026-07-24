@@ -21,14 +21,23 @@ demostrar, no para generalidad.
 
 ## Estado
 
-**Nada está implementado todavía.** El repo es un scaffold: estructura de carpetas y
-specs. Los dos servicios están especificados pero vacíos.
+```
+apps/api/     FastAPI + Pydantic AI, va a Railway. El esqueleto camina (webhook, agente,
+              memoria en RAM); faltan db.py, etl.py, tutela.py y las cuatro tools
+apps/web/     Landing en Next.js, va a Vercel. Todavía vacío
+raw/          Fuentes SISMED e INVIMA (~11 MB, SÍ van al repo) + el CSV del INVIMA
+```
 
-```
-apps/api/     Spec en apps/api/README.md — FastAPI + Pydantic AI, va a Railway
-apps/web/     Spec en apps/web/README.md — landing en Next.js, va a Vercel
-raw/          Fuentes SISMED e INVIMA (los dos archivos SÍ van al repo, ~11 MB)
-```
+El estado real de cada servicio está al principio de su README, no aquí — este archivo se
+desactualiza primero.
+
+**Los datos del INVIMA ya están extraídos.** El PDF resultó ser tres tablas en fuente de
+2,4 pt con celdas combinadas que cruzan páginas; `raw/invima/extraer_invima.py` lo
+convierte a `desabastecimiento.csv` (783 filas, commiteado). Ese script es de un solo uso
+y se vuelve a correr cuando salga el listado del mes siguiente — **el ETL lee dos CSV y
+nunca abre un PDF**, por eso pdfplumber no es dependencia de la API. Las cuatro trampas
+del parseo están en `raw/README.md`; hay una que marca 373 medicamentos justo al revés de
+lo que dicen.
 
 **Antes de escribir código en cualquiera de los dos, leer su README.** Ahí está la
 estructura de archivos planeada, el modelo de datos, los endpoints, las variables de
