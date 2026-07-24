@@ -256,6 +256,12 @@ el corte quede congelado aunque la fuente publique otro después — el listado 
 reemplaza cada mes. [`raw/README.md`](raw/README.md) documenta las columnas, las trampas
 de parseo de cada archivo y por qué se guarda un precio y no otro.
 
+El del INVIMA viene en PDF, así que `raw/invima/extraer_invima.py` lo convierte a
+`desabastecimiento.csv` (783 filas, también commiteado). El ETL lee dos CSV y nunca abre
+un PDF: pdfplumber no es dependencia de la API. Ese PDF resultó ser **tres tablas** con
+columnas distintas, en fuente de 2,4 pt y con celdas combinadas que cruzan las páginas —
+las trampas están documentadas una por una en `raw/README.md`.
+
 Las fuentes de las cifras del problema —informes, sentencias y prensa— están en
 [`research/FUENTES.md`](research/FUENTES.md).
 
