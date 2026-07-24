@@ -25,9 +25,11 @@ from pathlib import Path
 
 import pdfplumber
 
-AQUI = Path(__file__).resolve().parent
-PDF = AQUI / "LISTADO DE ABASTECIMIENTO MAYO 2026.pdf"
-SALIDA = AQUI / "desabastecimiento.csv"
+# Anclado en __file__, no en el directorio de trabajo: el script corre igual
+# desde la raiz del repo o desde cualquier otra carpeta.
+DATA = Path(__file__).resolve().parent.parent  # resources/data/
+PDF = DATA / "raw" / "invima" / "LISTADO DE ABASTECIMIENTO MAYO 2026.pdf"
+SALIDA = DATA / "clean" / "desabastecimiento.csv"
 
 # Cortes de columna de la tabla A, verificados contra los `rect` de las paginas 0-71.
 # Las dos columnas RESUMEN (280 -> 527) son parrafos largos sobre unidades disponibles

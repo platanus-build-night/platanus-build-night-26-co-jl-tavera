@@ -1,11 +1,11 @@
 # Fuentes
 
-Todas las cifras del [README](../README.md) salen de aquí. Cada enlace lleva anotado **qué
+Todas las cifras del [README](../../README.md) salen de aquí. Cada enlace lleva anotado **qué
 dato aporta**, para que cualquier número del README se pueda rastrear hasta su fuente sin
 tener que abrir los 90 enlaces.
 
 Los datos de producto —columnas, cortes y trampas de parseo de SISMED e INVIMA— están en
-[`raw/README.md`](../raw/README.md), no acá.
+[`data/README.md`](../data/README.md), no acá.
 
 ---
 
@@ -30,7 +30,7 @@ la serie histórica de tutelas en salud.
 ## INVIMA — desabastecimiento
 
 Fuente del pilar 2. El listado es **mensual**, así que el enlace del portal cambia de
-contenido; el corte congelado que usa Curuba está en `raw/invima/`.
+contenido; el corte congelado que usa Curuba está en `resources/data/raw/invima/`.
 
 - Portal de desabastecimientos (listados mensuales):
   https://www.invima.gov.co/productos-vigilados/medicamentos-y-productos-biologicos/desabastecimientos
@@ -54,7 +54,7 @@ contenido; el corte congelado que usa Curuba está en `raw/invima/`.
 ## SISMED y precios de medicamentos
 
 Fuente del pilar 1. Lo que publica es un **techo regulado**, no un precio observado — la
-distinción está desarrollada en [`raw/README.md`](../raw/README.md).
+distinción está desarrollada en [`data/README.md`](../data/README.md).
 
 - Datos Abiertos Colombia — Precios de Medicamentos (**el CSV que carga el ETL**):
   https://www.datos.gov.co/Salud-y-Protecci-n-Social/Precios-Medicamentos/3t73-n4q9

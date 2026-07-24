@@ -25,18 +25,22 @@ demostrar, no para generalidad.
 apps/api/     FastAPI + Pydantic AI, va a Railway. El esqueleto camina (webhook, agente,
               memoria en RAM); faltan db.py, etl.py, tutela.py y las cuatro tools
 apps/web/     Landing en Next.js, va a Vercel. Todavía vacío
-raw/          Fuentes SISMED e INVIMA (~11 MB, SÍ van al repo) + el CSV del INVIMA
+resources/
+  data/raw/     Fuentes SISMED e INVIMA (~11 MB, SÍ van al repo)
+  data/clean/   desabastecimiento.csv — derivado del PDF, es lo que lee el ETL
+  data/scripts/ extraer_invima.py — de un solo uso, no es dependencia de la API
+  docs/         DEPLOYMENT.md y RESEARCH.md
 ```
 
 El estado real de cada servicio está al principio de su README, no aquí — este archivo se
 desactualiza primero.
 
 **Los datos del INVIMA ya están extraídos.** El PDF resultó ser tres tablas en fuente de
-2,4 pt con celdas combinadas que cruzan páginas; `raw/invima/extraer_invima.py` lo
+2,4 pt con celdas combinadas que cruzan páginas; `resources/data/scripts/extraer_invima.py` lo
 convierte a `desabastecimiento.csv` (783 filas, commiteado). Ese script es de un solo uso
 y se vuelve a correr cuando salga el listado del mes siguiente — **el ETL lee dos CSV y
 nunca abre un PDF**, por eso pdfplumber no es dependencia de la API. Las cuatro trampas
-del parseo están en `raw/README.md`; hay una que marca 373 medicamentos justo al revés de
+del parseo están en `resources/data/README.md`; hay una que marca 373 medicamentos justo al revés de
 lo que dicen.
 
 **Antes de escribir código en cualquiera de los dos, leer su README.** Ahí está la
@@ -63,7 +67,7 @@ uv pip compile pyproject.toml -o requirements.txt    # regenerar para Railway
 
 PYTHONPATH=src uv run python -m curuba.agent         # REPL del agente, sin WhatsApp
 PYTHONPATH=src uv run python -m curuba.db            # aplicar schema.sql a mano
-uv run python -m curuba.etl                          # cargar raw/ (aún no existe)
+uv run python -m curuba.etl                          # cargar resources/data/ (aún no existe)
 ```
 
 El REPL solo necesita `OPENROUTER_API_KEY` y `DATABASE_URL`: sirve para iterar el prompt
@@ -73,29 +77,17 @@ manda un POST form-encoded a `/webhooks/twilio/whatsapp` con `From=whatsapp:%2B5
 el número tiene que haberle escrito al sender en las últimas 24 h o Meta rechaza el
 mensaje con **error 63016**.
 
-## Dos repos: el del jurado y el espejo de Railway
+## Despliegue
 
-Railway no puede acceder al repo de la organización, así que hay un espejo privado
-—`jl-tavera/curuba-platanus`— y `origin` tiene **dos push URLs**: un solo `git push`
-actualiza los dos. Es la receta que trae el README de Platanus.
+Todo el detalle está en [`resources/docs/DEPLOYMENT.md`](resources/docs/DEPLOYMENT.md):
+Railway, la configuración del sender de Twilio, la ventana de 24 h de Meta y el orden en
+que conviene probar. Lo mínimo para no romper nada sin leerlo:
 
-**Se trabaja siempre en esta carpeta.** `../curuba-platanus` es una copia de solo
-lectura con el push inhabilitado a propósito; si se commitea allá, las historias divergen
-y el push de acá empieza a fallar.
-
-Esa config vive en `.git/config` y **no se commitea**, así que hay un hook
-`.git/hooks/pre-push` que aborta si falta alguno de los dos remotos —sin él, el espejo se
-desactualiza en silencio y Railway despliega código viejo. Si el repo se vuelve a clonar,
-ambas cosas hay que rehacerlas:
-
-```bash
-git remote set-url --add --push origin https://github.com/platanus-build-night/platanus-build-night-26-co-jl-tavera.git
-git remote set-url --add --push origin https://github.com/jl-tavera/curuba-platanus.git
-git remote get-url --push --all origin   # verificar: deben salir los dos
-```
-
-El orden importa: el primer `--add --push` **reemplaza** el default implícito, así que si
-solo se agrega el espejo, el repo del jurado deja de recibir commits.
+- **Hay dos repos.** Railway no accede al de la organización, así que `origin` tiene dos
+  push URLs y un solo `git push` actualiza el del jurado y el espejo
+  `jl-tavera/curuba-platanus`. Esa config vive en `.git/config`, **no se commitea**, y un
+  hook `pre-push` aborta si falta alguno.
+- **Se trabaja siempre en esta carpeta.** `../curuba-platanus` es copia de solo lectura.
 
 ## Skills
 

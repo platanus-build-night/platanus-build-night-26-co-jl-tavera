@@ -7,15 +7,15 @@ cada mes.
 
 | Carpeta | Archivo | Peso | Corte |
 |---|---|---|---|
-| `sismed/` | `Precio_máximo_de_venta_de_los_medicamentos_por_presentación_comercial_20260724.csv` | 9,5 MB | 2026-07-24 |
-| `invima/` | `LISTADO DE ABASTECIMIENTO MAYO 2026.pdf` | 1,6 MB | mayo 2026 |
+| `raw/sismed/` | `Precio_máximo_de_venta_de_los_medicamentos_por_presentación_comercial_20260724.csv` | 9,5 MB | 2026-07-24 |
+| `raw/invima/` | `LISTADO DE ABASTECIMIENTO MAYO 2026.pdf` | 1,6 MB | mayo 2026 |
 
 Este README documenta lo que **de verdad** traen los archivos, no lo que uno esperaría.
 Los dos tienen sorpresas y las dos importan.
 
 ---
 
-## SISMED — `sismed/*.csv`
+## SISMED — `raw/sismed/*.csv`
 
 **Qué es.** Los precios máximos de venta regulados por la Comisión Nacional de Precios de
 Medicamentos y Dispositivos Médicos (CNPMDM). Es un techo, no un precio observado.
@@ -102,7 +102,7 @@ sostenerla es mejor que dar una cifra que no se cumple en el mostrador.
 
 ---
 
-## INVIMA — `invima/*.pdf`
+## INVIMA — `raw/invima/*.pdf`
 
 **Qué es.** El seguimiento de abastecimiento del INVIMA: medicamentos en monitorización,
 en riesgo de desabastecimiento y desabastecidos.
@@ -162,15 +162,15 @@ que significa exactamente lo contrario. **El estado hay que leerlo de la columna
 
 ### Extracción
 
-`invima/extraer_invima.py`, con pdfplumber. Corre sin instalar nada y no necesita el
+`scripts/extraer_invima.py`, con pdfplumber. Corre sin instalar nada y no necesita el
 entorno de la API — por eso pdfplumber **no** es dependencia de `apps/api`:
 
 ```bash
-uv run --with pdfplumber python raw/invima/extraer_invima.py --paginas 0-2 --verificar
-uv run --with pdfplumber python raw/invima/extraer_invima.py    # las 93 páginas
+uv run --with pdfplumber python resources/data/scripts/extraer_invima.py --paginas 0-2 --verificar
+uv run --with pdfplumber python resources/data/scripts/extraer_invima.py    # las 93 páginas
 ```
 
-Salida: **`invima/desabastecimiento.csv`**, 783 filas, commiteado.
+Salida: **`clean/desabastecimiento.csv`**, 783 filas, commiteado.
 Columnas `nombre,atc,estado,fecha_seguimiento,listado`, con `listado` en `activo`
 (tabla A) o `cerrado` (tabla B). El ETL lo lee igual que el CSV del SISMED.
 
@@ -252,4 +252,4 @@ fuente: una fórmula a mano dice "acetaminofen 500" y SISMED dice
 `ACETAMINOFÉN - Sólido - Oral`. La búsqueda es por similitud de trigramas (`pg_trgm`)
 sobre texto normalizado sin tildes, y le devuelve al agente los candidatos con su score
 para que desambigüe o pregunte. El detalle está en
-[`apps/api/README.md`](../apps/api/README.md).
+[`apps/api/README.md`](../../apps/api/README.md).

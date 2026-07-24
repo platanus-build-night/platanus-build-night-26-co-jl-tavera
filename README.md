@@ -38,7 +38,7 @@ el único canal que ya tiene abierto.
 
 ### Las cifras
 
-Todas las fuentes están en [`research/FUENTES.md`](research/FUENTES.md), con anotación de qué dato aporta
+Todas las fuentes están en [`resources/docs/RESEARCH.md`](resources/docs/RESEARCH.md), con anotación de qué dato aporta
 cada una.
 
 **El sistema no entrega**
@@ -126,7 +126,7 @@ venta **final al público**— viene con valor en **4 filas de 38.731**; en el r
 `No regulado`. El precio del canal **institucional**, en cambio, viene en las 38.731. Así
 que Curuba no puede decir "esto es lo que deberías pagar en la droguería": dice cuál es el
 techo regulado del canal institucional, que sí está respaldado. Es menos vendedor y es lo
-único honesto. El detalle está en [`raw/README.md`](raw/README.md).
+único honesto. El detalle está en [`resources/data/README.md`](resources/data/README.md).
 
 ### 2. Consulta de desabastecimiento
 
@@ -251,19 +251,19 @@ clave, así que las tres funciones conviven en la misma conversación.
 | **SISMED** (MinSalud / SISPRO) | Techos de precio de la Circular CNPMDM — institucional y comercial | 2026-07-24 |
 | **INVIMA** | Estado de seguimiento de abastecimiento por principio activo | mayo 2026 |
 
-Los dos archivos fuente **están en el repo**, en `raw/` (~11 MB entre los dos), para que
+Los dos archivos fuente **están en el repo**, en `resources/data/` (~11 MB entre los dos), para que
 el corte quede congelado aunque la fuente publique otro después — el listado del INVIMA se
-reemplaza cada mes. [`raw/README.md`](raw/README.md) documenta las columnas, las trampas
+reemplaza cada mes. [`resources/data/README.md`](resources/data/README.md) documenta las columnas, las trampas
 de parseo de cada archivo y por qué se guarda un precio y no otro.
 
-El del INVIMA viene en PDF, así que `raw/invima/extraer_invima.py` lo convierte a
+El del INVIMA viene en PDF, así que `resources/data/scripts/extraer_invima.py` lo convierte a
 `desabastecimiento.csv` (783 filas, también commiteado). El ETL lee dos CSV y nunca abre
 un PDF: pdfplumber no es dependencia de la API. Ese PDF resultó ser **tres tablas** con
 columnas distintas, en fuente de 2,4 pt y con celdas combinadas que cruzan las páginas —
-las trampas están documentadas una por una en `raw/README.md`.
+las trampas están documentadas una por una en `resources/data/README.md`.
 
 Las fuentes de las cifras del problema —informes, sentencias y prensa— están en
-[`research/FUENTES.md`](research/FUENTES.md).
+[`resources/docs/RESEARCH.md`](resources/docs/RESEARCH.md).
 
 ## Correr localmente
 
@@ -272,7 +272,7 @@ cd apps/api
 cp .env.example .env          # llenar DATABASE_URL, OPENROUTER_API_KEY y las de Twilio
 
 uv sync --extra etl
-uv run python -m curuba.etl   # crea el esquema y carga raw/ a Postgres
+uv run python -m curuba.etl   # crea el esquema y carga resources/data/ a Postgres
 uv run uvicorn curuba.main:app --app-dir src --reload
 ```
 
@@ -295,11 +295,14 @@ apps/api/src/curuba/
   db.py        pool de asyncpg + todo el SQL
   agent.py     el Agent y sus cuatro tools
   tutela.py    campos de procedibilidad + render del PDF
-  etl.py       carga raw/ a Postgres
+  etl.py       carga resources/data/ a Postgres
   schema.sql   tablas, extensiones e índices
 apps/web/      landing en Next.js
-raw/           fuentes SISMED e INVIMA
-research/      FUENTES.md — las fuentes de todas las cifras de este README
+resources/
+  data/raw/      fuentes originales: el CSV del SISMED y el PDF del INVIMA
+  data/clean/    desabastecimiento.csv — lo que produce el script, lo que lee el ETL
+  data/scripts/  extraer_invima.py — convierte el PDF a CSV
+  docs/          DEPLOYMENT.md (cómo se despliega) y RESEARCH.md (de dónde sale cada cifra)
 ```
 
 ## Aviso legal

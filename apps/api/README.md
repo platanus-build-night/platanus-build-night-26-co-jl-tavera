@@ -56,7 +56,7 @@ apps/api/
 | `db.py` | Pool de asyncpg y **todo** el SQL del proyecto |
 | `agent.py` | El `Agent` de Pydantic AI: prompt del sistema y las cuatro tools |
 | `tutela.py` | Campos de procedibilidad y render del PDF |
-| `etl.py` | Carga `raw/` a Postgres — se corre en local, no en Railway |
+| `etl.py` | Carga `resources/data/` a Postgres — se corre en local, no en Railway |
 | `schema.sql` | Tablas, extensiones e índices |
 | `DejaVuSans.ttf` | Fuente Unicode para el PDF (ver trampa #2) |
 
@@ -107,7 +107,7 @@ normalizado, e índice GIN `gin_trgm_ops` encima.
 ### `medications`
 
 El CSV del SISMED **no trae columnas de principio activo, marca ni laboratorio** — hay
-que derivarlas. Detalle completo del archivo en [`raw/README.md`](../../raw/README.md).
+que derivarlas. Detalle completo del archivo en [`resources/data/README.md`](../../resources/data/README.md).
 
 | Columna | De dónde sale |
 |---|---|
@@ -137,8 +137,8 @@ posición. `Medicamento` varía entre 2 y 6 segmentos: **primero y último, nunc
 
 ### `shortages`
 
-Se carga desde `raw/invima/desabastecimiento.csv` — **783 filas**, ya extraídas del PDF
-(ver [`raw/README.md`](../../raw/README.md)). El ETL no abre PDFs.
+Se carga desde `resources/data/clean/desabastecimiento.csv` — **783 filas**, ya extraídas del PDF
+(ver [`resources/data/README.md`](../../resources/data/README.md)). El ETL no abre PDFs.
 
 La fuente del INVIMA **no trae CUM**, trae ATC — o sea que no se puede unir con
 `medications` por llave; el cruce, si se hace, es por nombre o por ATC. El `No.` tampoco
@@ -216,7 +216,7 @@ cd apps/api
 cp .env.example .env          # llenar las variables de arriba
 
 uv sync --extra etl           # el extra 'etl' trae pandas y openpyxl
-uv run python -m curuba.etl   # crea el esquema y carga raw/
+uv run python -m curuba.etl   # crea el esquema y carga resources/data/
 uv run uvicorn curuba.main:app --app-dir src --reload
 ```
 
@@ -278,21 +278,21 @@ dar precio.
 
 ## Datos
 
-Los archivos fuente **están en el repo**, en [`raw/`](../../raw/README.md):
+Los archivos fuente **están en el repo**, en [`resources/data/`](../../resources/data/README.md):
 
 | Fuente | Archivo | Qué carga el ETL | Corte |
 |---|---|---|---|
-| SISMED | `raw/sismed/Precio_máximo_de_venta_..._20260724.csv` (9,5 MB) | 38.731 filas | 2026-07-24 |
-| INVIMA | `raw/invima/LISTADO DE ABASTECIMIENTO MAYO 2026.pdf` (1,6 MB) | — | mayo 2026 |
-| INVIMA | `raw/invima/desabastecimiento.csv` (83 KB) | 783 filas | mayo 2026 |
+| SISMED | `resources/data/raw/sismed/Precio_máximo_de_venta_..._20260724.csv` (9,5 MB) | 38.731 filas | 2026-07-24 |
+| INVIMA | `resources/data/raw/invima/LISTADO DE ABASTECIMIENTO MAYO 2026.pdf` (1,6 MB) | — | mayo 2026 |
+| INVIMA | `resources/data/clean/desabastecimiento.csv` (83 KB) | 783 filas | mayo 2026 |
 
 **El ETL lee dos CSV, nunca el PDF.** La extracción es un paso aparte
-(`raw/invima/extraer_invima.py`, con pdfplumber) que ya corrió y dejó su salida
+(`resources/data/scripts/extraer_invima.py`, con pdfplumber) que ya corrió y dejó su salida
 commiteada. Por eso pdfplumber **no** va en el extra `etl` ni en `requirements.txt`: solo
 haría más lento cada deploy de Railway. Se vuelve a correr cuando el INVIMA publique el
 listado del mes siguiente.
 
-`raw/README.md` tiene el detalle de columnas, las trampas de parseo de cada uno y la
+`resources/data/README.md` tiene el detalle de columnas, las trampas de parseo de cada uno y la
 justificación de por qué se guarda un precio y no otro. **Leerlo antes de escribir el
 ETL.**
 

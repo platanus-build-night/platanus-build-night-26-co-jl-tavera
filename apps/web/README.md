@@ -88,7 +88,7 @@ una línea de atribución.
 | **74,3 %** | de las tutelas se conceden: el juez le da la razón al paciente |
 
 Atribución: *Defensoría del Pueblo, 2025 — encuesta en puntos de dispensación (n=3.449).
-Todas las fuentes en `research/FUENTES.md`.*
+Todas las fuentes en `resources/docs/RESEARCH.md`.*
 
 **Los dos detalles chiquitos no son decoración.** El `n=3.449` es lo que separa una
 encuesta de un titular. Y el `+17,8 %` es a propósito: la prensa titula **+17,92 %**
@@ -149,8 +149,8 @@ Esto es lo que hace creíbles los precios; **no esconderlo en un pie de página.
 | **SISMED** (MinSalud / SISPRO) | Techos de precio de la Circular CNPMDM | 2026-07-24 | 38.731 medicamentos |
 | **INVIMA** | Estado de seguimiento de abastecimiento | mayo 2026 | 783 medicamentos |
 
-Con enlace a [`raw/README.md`](../../raw/README.md) —columnas, cortes y trampas de
-parseo— y a [`research/FUENTES.md`](../../research/FUENTES.md), que rastrea cada cifra
+Con enlace a [`resources/data/README.md`](../../resources/data/README.md) —columnas, cortes y trampas de
+parseo— y a [`resources/docs/RESEARCH.md`](../../resources/docs/RESEARCH.md), que rastrea cada cifra
 hasta su fuente.
 
 ### 5. Aviso legal
@@ -169,7 +169,7 @@ institucional, en cambio, viene en las 38.731. Así que la página **no puede pr
 "esto es lo que vas a pagar en la droguería"**: dice cuál es el techo regulado del canal
 institucional, que sirve de referencia para saber si lo que están pidiendo está fuera de
 rango. Es menos vendedor y es lo único honesto. El detalle está en
-[`raw/README.md`](../../raw/README.md#sorpresa-2-el-precio-que-le-importa-al-paciente-casi-nunca-está-regulado).
+[`resources/data/README.md`](../../resources/data/README.md#sorpresa-2-el-precio-que-le-importa-al-paciente-casi-nunca-está-regulado).
 
 **"No desabastecido" no es lo mismo que "no aparece".** El corte de mayo 2026 trae 783
 medicamentos en cuatro estados:
