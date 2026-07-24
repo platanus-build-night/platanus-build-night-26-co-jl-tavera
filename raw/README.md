@@ -109,14 +109,30 @@ en riesgo de desabastecimiento y desabastecidos.
 
 **Fuente.** INVIMA — listado de abastecimiento, publicación mensual.
 
-**Forma del archivo.** 93 páginas de una sola tabla que se repite. Columnas:
+**Forma del archivo.** 93 páginas, y **no es una sola tabla sino tres**, con columnas y
+estados distintos. Se distinguen por las coordenadas x de sus rectángulos, no por número
+de página (el listado se republica cada mes con otra paginación):
+
+| Tabla | Páginas | Columnas | Estados | Qué es |
+|---|---|---|---|---|
+| **A** | 0–71 | 9 | `En monitorización`, `En riesgo de desabastecimiento`, `Desabastecido` | Seguimiento activo |
+| **B** | 72–89 | 8 o 9 | `No desabastecido` | Casos cerrados |
+| **C** | 90–92 | 8 | `No comercializado`, `Descontinuado` | Anexo, **se descarta** |
+
+Columnas de la tabla A:
 
 `No.` · `Nombre del Medicamento` · `ATC` · `Fecha de inicio del seguimiento` ·
 `Fecha del último seguimiento` · `Estado` · `Causas / Observaciones` ·
 `RESUMEN CANAL COMERCIAL` · `RESUMEN CANAL INSTITUCIONAL`
 
-**Estados que aparecen:** *En monitorización* (~421 menciones) y *Desabastecido* (~13).
-El título del documento menciona además *riesgo de desabastecimiento*.
+La B y la C cambian `Causas / Observaciones` (que siempre dice `---`) por una
+`Fecha de cierre`, y no traen las dos de RESUMEN.
+
+**La tabla A empieza en la página 0**, debajo de las notas aclaratorias — no en la 1. Los
+medicamentos 1 a 6 están ahí.
+
+**Cada tabla renumera desde 1**, así que `No.` no sirve de llave: hay un `No. 1` en la A y
+otro en la B.
 
 ### Qué se necesita y qué se descarta
 
@@ -146,7 +162,86 @@ que significa exactamente lo contrario. **El estado hay que leerlo de la columna
 
 ### Extracción
 
-**Por definir.** Se documenta aquí cuando se decida el método.
+`invima/extraer_invima.py`, con pdfplumber. Corre sin instalar nada y no necesita el
+entorno de la API — por eso pdfplumber **no** es dependencia de `apps/api`:
+
+```bash
+uv run --with pdfplumber python raw/invima/extraer_invima.py --paginas 0-2 --verificar
+uv run --with pdfplumber python raw/invima/extraer_invima.py    # las 93 páginas
+```
+
+Salida: **`invima/desabastecimiento.csv`**, 783 filas, commiteado.
+Columnas `nombre,atc,estado,fecha_seguimiento,listado`, con `listado` en `activo`
+(tabla A) o `cerrado` (tabla B). El ETL lo lee igual que el CSV del SISMED.
+
+| Estado | Filas |
+|---|---|
+| `monitorizacion` | 389 |
+| `no_desabastecido` | 373 |
+| `desabastecido` | 11 |
+| `riesgo` | 9 |
+
+Un mismo principio activo aparece varias veces con formas distintas (`ÁCIDO VALPROICO
+CÁPSULA DURA`, `... JARABE`, `... SOLUCIÓN INYECTABLE`). Son filas legítimamente
+distintas: **no deduplicar por nombre.**
+
+#### Cuatro trampas del PDF
+
+**1. `extract_table()` con los defaults devuelve basura en la tabla A.** La fuente es de
+2,4 pt con interlínea de 2,9 pt, y el `y_tolerance` por defecto de pdfplumber es 3 —
+mayor que la interlínea. Colapsa las 9 líneas de una celda en una y las ordena por x:
+
+```
+2EUA(PVCE U 1NNB RE LA M / IR NO P 0 T ED D 4 T I AI M LAL T / ) AC 2 : D E U C D S 0 I 2D
+```
+
+No es un PDF dañado ni un problema de encoding (las tildes salen bien; si se ven mal es
+la consola — `PYTHONIOENCODING=utf-8`). Para la tabla A se trabaja directo sobre
+`page.chars` con cortes de columna explícitos y agrupando líneas con tolerancia de
+0,5 pt. Para la B sí sirve `extract_table`: fuente de 2,8 pt y filas planas.
+
+**2. La tabla A tiene celdas combinadas verticalmente.** Un medicamento ocupa N
+sub-filas, una por titular de Registro Sanitario, y solo la primera trae `No.`, `Nombre`
+y `Estado`; las demás solo ATC, fechas y RESUMEN. Los `rect` de esas celdas tienen
+**altura 0** (son bordes dibujados, no cajas), así que la combinación no se puede leer de
+la geometría: el ancla son los dígitos de la columna `No.`. Los grupos además **cruzan
+páginas**.
+
+**3. El corte del encabezado tiene ~1 pt de margen.** El encabezado repetido llega hasta
+`top=76.9` y la primera fila de datos arranca en `77.7`. Subir el corte se come el
+medicamento que abre la página; bajarlo mete texto del encabezado y, peor, deja entrar
+las celdas combinadas que cruzan el salto de página: el exportador las dibuja centradas
+sobre todo el rango combinado, así que caen en `top` negativo (el `43 AZITROMICINA` de la
+página 8 sale en `top=-370.9`). Son un duplicado del medicamento que ya se leyó en la
+página anterior.
+
+**4. `desabastecido` es subcadena de `no desabastecido`.** La misma trampa de la sección
+de arriba, pero mordiendo al normalizar. Probando los literales en el orden del dict, las
+373 filas de la tabla B salen marcadas como **desabastecidas — exactamente al revés**, y
+pasan todos los chequeos en silencio. Se prueban de más largo a más corto.
+
+#### Defectos de la fuente, no del parser
+
+Están verificados uno por uno; el script los reporta en cada corrida:
+
+- **Números repetidos**: `133` y `164` en la tabla A, `362` en la B. Son medicamentos
+  **distintos** a los que el INVIMA les puso el mismo número (dos presentaciones de
+  ESOMEPRAZOL, `FLUCONAZOL` vs `FLUCONAZOL + SECNIDAZOL`, `UPADACITINIB` vs una vacuna).
+  No hay ninguna fila con `nombre`+`atc` repetidos.
+- **Hueco**: el `No. 201` no existe en la tabla B.
+- **`Estado` en blanco** en el `No. 276` (`OXCARBAZEPINA SUSPENSION ORAL`). Queda vacío en
+  el CSV: está en el listado de casos cerrados, pero rellenarlo sería inventarse un dato
+  de salud.
+- **`Fecha de la última revisión` en blanco** en el `No. 352` (los toxoides). Se toma la
+  `Fecha de cierre`, y el script avisa cuál fila usó ese respaldo.
+- `V07AB` es un ATC de nivel 4 legítimo, no un error: los dos últimos dígitos son
+  opcionales.
+- El PDF trae espacios de ancho cero pegados a algunos ATC (`S01ED51​`) y la fuente de las
+  filas de vacunas mapea mal la mu (`2.50000 æg` es `2.50000 µg`). Los dos se limpian.
+
+**El chequeo que vale**: que la secuencia de `No.` sea contigua dentro de cada tabla. Si
+el ancla falla aparece un hueco — así se encontró la trampa 3, que estaba perdiendo 17
+medicamentos en silencio.
 
 ---
 
