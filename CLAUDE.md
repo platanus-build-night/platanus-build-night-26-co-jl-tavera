@@ -55,18 +55,47 @@ entorno y las trampas conocidas. Ese es el spec, no este archivo.
 
 ## Comandos
 
-Aplican una vez que `apps/api` exista (hoy todavía no).
-
 ```bash
 cd apps/api
-uv sync --extra etl                                  # instalar (etl trae pandas)
-uv run python -m curuba.etl                          # cargar raw/ a Postgres
+uv sync                                              # --extra etl añade pandas
 uv run uvicorn curuba.main:app --app-dir src --reload
 uv pip compile pyproject.toml -o requirements.txt    # regenerar para Railway
+
+PYTHONPATH=src uv run python -m curuba.agent         # REPL del agente, sin WhatsApp
+PYTHONPATH=src uv run python -m curuba.db            # aplicar schema.sql a mano
+uv run python -m curuba.etl                          # cargar raw/ (aún no existe)
 ```
 
-Para probar el webhook en local hace falta un túnel público (`ngrok http 8000`) y
-apuntar el webhook de Twilio ahí.
+El REPL solo necesita `OPENROUTER_API_KEY` y `DATABASE_URL`: sirve para iterar el prompt
+sin tocar Twilio. Para probar el webhook completo en local no hace falta túnel — se le
+manda un POST form-encoded a `/webhooks/twilio/whatsapp` con `From=whatsapp:%2B57...`
+(el `+` va como `%2B`) y la respuesta sale por la API REST al celular de verdad. Eso sí,
+el número tiene que haberle escrito al sender en las últimas 24 h o Meta rechaza el
+mensaje con **error 63016**.
+
+## Dos repos: el del jurado y el espejo de Railway
+
+Railway no puede acceder al repo de la organización, así que hay un espejo privado
+—`jl-tavera/curuba-platanus`— y `origin` tiene **dos push URLs**: un solo `git push`
+actualiza los dos. Es la receta que trae el README de Platanus.
+
+**Se trabaja siempre en esta carpeta.** `../curuba-platanus` es una copia de solo
+lectura con el push inhabilitado a propósito; si se commitea allá, las historias divergen
+y el push de acá empieza a fallar.
+
+Esa config vive en `.git/config` y **no se commitea**, así que hay un hook
+`.git/hooks/pre-push` que aborta si falta alguno de los dos remotos —sin él, el espejo se
+desactualiza en silencio y Railway despliega código viejo. Si el repo se vuelve a clonar,
+ambas cosas hay que rehacerlas:
+
+```bash
+git remote set-url --add --push origin https://github.com/platanus-build-night/platanus-build-night-26-co-jl-tavera.git
+git remote set-url --add --push origin https://github.com/jl-tavera/curuba-platanus.git
+git remote get-url --push --all origin   # verificar: deben salir los dos
+```
+
+El orden importa: el primer `--add --push` **reemplaza** el default implícito, así que si
+solo se agrega el espejo, el repo del jurado deja de recibir commits.
 
 ## Skills
 
