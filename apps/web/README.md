@@ -3,27 +3,26 @@
 La página pública. Explica qué hace Curuba y manda a la gente al WhatsApp. Es una sola
 página: no hay login, ni dashboard, ni backend propio — todo el producto vive en el chat.
 
-> **Estado: sin implementar.** Esta carpeta es el spec: hoy solo está este archivo.
+> **Estado: escrita y desplegada.** La página vive en `app/page.tsx` y corre en Railway
+> como el servicio `curuba-web`. Lo que sigue es el spec con el que se escribió: las
+> cifras, el copy y los ejemplos de chat están resueltos acá abajo.
 >
 > **La landing no depende de la API.** No la consume, no le pega a Postgres, no tiene
-> variables de servidor: el único llamado a la acción es un enlace `wa.me`. Se puede
-> escribir y desplegar aunque las tools del agente todavía no estén listas, y eso la
-> vuelve lo primero que se puede dar por terminado.
-
-Este README debe alcanzar para escribir la página entera sin abrir otro archivo. Las
-cifras, el copy y los ejemplos de chat ya están resueltos acá abajo.
+> variables de servidor: el único llamado a la acción es un enlace `wa.me`. Por eso se pudo
+> terminar y desplegar antes que las tools del agente.
 
 ## Stack
 
-Next.js (App Router) + Tailwind, desplegado en Vercel. Todo estático: no hay fetch en
+Next.js (App Router) + Tailwind, desplegado en **Railway**. Todo estático: no hay fetch en
 runtime, así que la página se prerenderiza completa.
 
-## Estructura planeada
+## Estructura
 
 ```
 apps/web/
 ├── package.json
 ├── next.config.ts
+├── railway.json           # builder, start command con -p $PORT, watchPatterns
 ├── .env.local
 ├── public/
 │   └── project-logo.png   # copiado de la raíz del repo — ver "Marca y assets"
@@ -192,7 +191,7 @@ contornos y texto, amarillo curuba para el fondo cálido, naranja de la pulpa pa
 acento, verde hoja para el CTA — que además es el verde con el que la gente asocia
 WhatsApp, y eso acá juega a favor.
 
-**Hay que copiar `project-logo.png` a `apps/web/public/`.** Vercel construye con el Root
+**Hay que copiar `project-logo.png` a `apps/web/public/`.** Railway construye con el Root
 Directory en `apps/web` y no ve la raíz del repo, así que un `../../project-logo.png`
 falla en el build aunque funcione en local. De ahí salen el favicon y el `og:image`.
 
@@ -201,15 +200,30 @@ falla en el build aunque funcione en local. De ahí salen el favicon y el `og:im
 | Variable | Para qué |
 |---|---|
 | `NEXT_PUBLIC_WHATSAPP_URL` | El enlace `wa.me` con el número y un texto prellenado |
+| `NEXT_PUBLIC_SITE_URL` | El dominio público, para que el `og:image` sea absoluto |
 
 ```
 NEXT_PUBLIC_WHATSAPP_URL=https://wa.me/12603057633?text=Hola%20Curuba
+NEXT_PUBLIC_SITE_URL=https://<dominio-de-railway>
 ```
 
-El número no va hardcodeado en el JSX: durante el hackathon puede cambiar, y si está en el
-entorno se cambia en Vercel sin volver a desplegar código. El valor sale de
-`TWILIO_WHATSAPP_FROM` en `apps/api/.env.example` — **solo el número**: ese archivo tiene
-credenciales reales al lado y nada más de ahí entra a este repo público.
+El número no va hardcodeado en el JSX: durante el hackathon puede cambiar, y teniéndolo en
+el entorno se cambia sin editar código. El valor sale de `TWILIO_WHATSAPP_FROM` en
+`apps/api/.env.example` — **solo el número**: ese archivo tiene credenciales reales al lado
+y nada más de ahí entra a este repo público.
+
+> ⚠️ **`NEXT_PUBLIC_*` se hornea en el build, no se lee en runtime.** La página se
+> prerenderiza entera, así que el valor queda escrito adentro del HTML. Cambiar la variable
+> en Railway y reiniciar **no cambia nada**: hay que redesplegar. (Esto es de Next, no de
+> Railway; en Vercel era igual.)
+
+`NEXT_PUBLIC_SITE_URL` es opcional en local — `layout.tsx` cae a `RAILWAY_PUBLIC_DOMAIN` y,
+si tampoco está, a `http://localhost:3000`. En producción **no** es opcional: si al momento
+de compilar no hay ninguna de las dos, el `og:image` queda apuntando a `localhost` y
+WhatsApp no muestra la tarjeta al compartir el enlace.
+
+**Ningún secreto lleva prefijo `NEXT_PUBLIC_`.** Termina en el HTML público. La landing no
+necesita credenciales de ningún tipo.
 
 **El texto prellenado no es cosmético.** Meta rechaza los mensajes salientes con **error
 63016** si el número no le ha escrito al sender en las últimas 24 horas. Que el usuario
@@ -226,19 +240,39 @@ npm run dev
 
 No necesita la API corriendo, ni Postgres, ni túnel.
 
-## Deploy en Vercel
+## Deploy en Railway
 
-**Vercel no se puede conectar a este repo.** Es de la organización
-`platanus-build-night` y las plataformas de deploy solo acceden a repos propios. El espejo
-ya existe: **`jl-tavera/curuba-platanus`**, y `origin` tiene dos push URLs, así que un solo
-`git push` actualiza los dos. La receta completa —y el hook `pre-push` que aborta si falta
-alguno de los dos remotos— está en [`CLAUDE.md`](../../CLAUDE.md) y en el
+La landing es un servicio más del mismo proyecto de Railway donde ya viven la API y
+Postgres: **`curuba-web`**. Un solo panel, un solo `git push`, un solo lugar donde mirar
+logs.
+
+**Railway no se puede conectar a este repo.** Es de la organización `platanus-build-night`
+y las plataformas de deploy solo acceden a repos propios. El espejo ya existe:
+**`jl-tavera/curuba-platanus`**, y `origin` tiene dos push URLs, así que un solo `git push`
+actualiza los dos. La receta completa —y el hook `pre-push` que aborta si falta alguno de
+los dos remotos— está en [`CLAUDE.md`](../../CLAUDE.md) y en el
 [README raíz](../../README.md#deploying-vercel-render-etc).
 
-Vercel se conecta **al espejo**, no al repo de la organización.
+Dos ajustes en *Settings*, y **el segundo no hereda del primero**:
 
-En el proyecto de Vercel, poner el **Root Directory** en `apps/web`; si no, el build falla
-porque no encuentra el `package.json` en la raíz.
+| Ajuste | Valor |
+|---|---|
+| Root Directory | `apps/web` |
+| Config file path | `apps/web/railway.json` |
+
+Lo demás lo pone `railway.json`: builder `RAILPACK`, healthcheck en `/`, `watchPatterns`
+para que un cambio en `apps/api` no reconstruya esto, y el start command con **`-p $PORT`**
+—sin eso `next start` se queda en el 3000 y el healthcheck falla con el deploy en verde—.
+
+El detalle completo, incluido el orden obligatorio *crear → generar dominio → redesplegar*,
+está en [`DEPLOYMENT.md`](../../resources/docs/DEPLOYMENT.md#servicio-de-la-landing).
+
+Antes de gastar un ciclo de deploy conviene probar el build en local, que es el mismo que
+corre Railway:
+
+```bash
+npm run build && npm start
+```
 
 ## Aviso legal
 

@@ -24,12 +24,15 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-// En Vercel sale de la URL de producción; en local, de localhost. Sin esto
-// el og:image queda relativo y no lo resuelve ningún cliente de WhatsApp.
+// Sin esto el og:image queda relativo y no lo resuelve ningún cliente de
+// WhatsApp — que es justo por donde se comparte esta página. Se hornea en el
+// build: cambiar la variable exige redesplegar, no basta con reiniciar.
+// `RAILWAY_PUBLIC_DOMAIN` solo existe después de generar el dominio, así que
+// `NEXT_PUBLIC_SITE_URL` es la ruta determinista y va primero.
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  (process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
     : "http://localhost:3000");
 
 const descripcion =

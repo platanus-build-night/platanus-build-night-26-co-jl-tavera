@@ -1,8 +1,11 @@
 # Desplegar Curuba
 
-Cómo se pone en pie el número de WhatsApp: los dos repos, Railway, Twilio y el orden en
-que conviene probar. Cada sección marcada con ⚠️ es una trampa que ya costó tiempo una vez
-— están escritas para no volver a pagarlas.
+Cómo se pone en pie el número de WhatsApp y la landing: los dos repos, Railway, Twilio y el
+orden en que conviene probar. Cada sección marcada con ⚠️ es una trampa que ya costó tiempo
+una vez — están escritas para no volver a pagarlas.
+
+Todo vive en un solo proyecto de Railway: **`curuba-platanus`** (la API), **`curuba-web`**
+(la landing) y **`Postgres`**.
 
 ---
 
@@ -85,7 +88,7 @@ FastAPI en cada arranque, y es idempotente. Efecto secundario útil: si las exte
 `pg_trgm`/`unaccent` no se dejan instalar, **el arranque falla y el healthcheck lo grita**,
 en vez de descubrirlo al escribir la primera query de trigramas.
 
-### Variables
+### Variables de la API
 
 ```
 DATABASE_URL=${{Postgres.DATABASE_URL}}      ← referencia, no pegar la URL
@@ -167,6 +170,115 @@ un mensaje que dice cuál variable falta, precedido en los logs por
 `no se pudo abrir Postgres — revisar DATABASE_URL y las extensiones`. Si en vez de eso
 sale el traceback de `CREATE EXTENSION`, el problema es otro: son `pg_trgm`/`unaccent`, y
 eso está descrito arriba en *Postgres*.
+
+### Servicio de la landing
+
+**La landing también va en Railway, no en Vercel.** Es un servicio más del mismo proyecto,
+desplegado del mismo espejo y con el mismo `git push`: un solo panel, un solo lugar donde
+mirar logs. Es una página estática que no le pega a la API ni a Postgres — el único llamado
+a la acción es un enlace `wa.me`.
+
+*+ New → GitHub Repo →* **`jl-tavera/curuba-platanus`**, el mismo de la API. Después, en
+*Settings*:
+
+| Ajuste | Valor |
+|---|---|
+| Nombre | `curuba-web` |
+| Root Directory | `apps/web` |
+| **Config file path** | `apps/web/railway.json` |
+
+Aplica la misma ⚠️ de la API: **son dos ajustes distintos y el segundo no hereda del
+primero**.
+
+`apps/web/railway.json` usa **`RAILPACK`**, no `NIXPACKS`. Railpack es el builder actual de
+Railway y Nixpacks está marcado como legacy; la API se quedó en Nixpacks porque ya
+funcionaba y no se cambia un builder a mitad de camino. Que los dos servicios usen builders
+distintos es deliberado.
+
+El `startCommand` lleva `-p $PORT`:
+
+```
+npm run start -- -p $PORT -H 0.0.0.0
+```
+
+> ⚠️ **Sin `-p $PORT` el deploy sale `SUCCESS` y el healthcheck igual falla.** `next start`
+> se pega al 3000 y Railway le habla al puerto que él asignó. El contenedor está vivo y el
+> proceso corriendo; simplemente nadie lo escucha donde toca. Se lee como *Application
+> failed to respond*, que parece un crash y no lo es.
+
+### Variables de la landing
+
+```
+NEXT_PUBLIC_WHATSAPP_URL=https://wa.me/12603057633?text=Hola%20Curuba
+NEXT_PUBLIC_SITE_URL=https://<dominio-generado>     ← después de generar el dominio
+```
+
+Y nada más. **Ningún secreto lleva prefijo `NEXT_PUBLIC_`**: esa variable termina escrita
+en el HTML público. La landing no necesita `DATABASE_URL`, ni la llave de OpenRouter, ni el
+token de Twilio.
+
+> ⚠️ **Las `NEXT_PUBLIC_*` se hornean en el build, no se leen en runtime.** La página se
+> prerenderiza entera, así que el valor queda adentro del HTML. Cambiar la variable y
+> reiniciar **no cambia nada**: hay que **redesplegar**. (Esto es de Next, no de Railway —
+> en Vercel pasaba igual.)
+
+De ahí sale el orden obligatorio, que no es el intuitivo:
+
+1. Crear el servicio y poner `NEXT_PUBLIC_WHATSAPP_URL`.
+2. *Settings → Networking → **Generate Domain***.
+3. Poner `NEXT_PUBLIC_SITE_URL` con ese dominio.
+4. **Redesplegar**, para que los pasos 2 y 3 entren al build.
+
+Saltarse el paso 4 tiene un síntoma silencioso: `layout.tsx` arma el `metadataBase` con
+`NEXT_PUBLIC_SITE_URL` y, si falta, con `RAILWAY_PUBLIC_DOMAIN` — que **no existe hasta que
+el servicio tiene dominio**. Si ninguna de las dos está al momento de compilar, el
+`og:image` queda apuntando a `http://localhost:3000` y **WhatsApp no muestra la tarjeta**,
+que es justo el canal por el que se comparte esta página. La página se ve perfecta; lo que
+falla es el preview.
+
+Verificación, que es lo único que prueba que la variable entró al build:
+
+```bash
+curl -sI https://<dominio-web>/ | head -1                       # 200
+curl -s https://<dominio-web>/ | grep -o 'wa\.me[^"]*' | head -1
+curl -s https://<dominio-web>/ | grep -o '<meta property="og:image"[^>]*>'
+```
+
+### Un solo repo, dos servicios
+
+Los dos `railway.json` traen `watchPatterns` (`apps/api/**` y `apps/web/**`) para que un
+cambio en la landing no reconstruya la API y al revés.
+
+> ⚠️ **Si después de un push no se despliega *nada*, es esto.** La doc de Railway no aclara
+> si los globs se evalúan contra la raíz del repo o contra el Root Directory del servicio;
+> acá se asumió la raíz. Si resultó lo otro, los patrones no matchean nunca y ningún deploy
+> sale. El arreglo es quitar `watchPatterns` de los dos archivos: un deploy de más es
+> barato, un deploy que nunca sale en medio de una demo no.
+
+### Cuánto cuesta esto
+
+El plan **Hobby** son **USD 5/mes que son a la vez el crédito de consumo**: pagas 5 y
+gastas contra esos 5, y si te pasas te cobran solo el delta encima. Tarifas: USD 10/GB de
+RAM al mes, USD 20/vCPU al mes, USD 0,05/GB de egress.
+
+Los topes del plan no aprietan (48 GB de RAM y 48 vCPU **por servicio**; el límite de 5
+servicios por proyecto es del plan *Trial*, no del Hobby). Lo que aprieta es el crédito:
+
+| Servicio | RAM típica | Costo/mes 24/7 |
+|---|---|---|
+| `curuba-platanus` | ~300–400 MB | ~USD 3,5–4 |
+| `curuba-web` | ~120–180 MB | ~USD 1,3–1,9 |
+| `Postgres` | ~80–150 MB | ~USD 1 |
+| | | **~USD 6–9** |
+
+Railway factura por segundo, así que **durante el hackathon esto no importa**: cinco días
+con todo prendido son ~USD 1–1,5. El sobrecosto solo aparece si el proyecto sigue corriendo
+el mes completo.
+
+> **Cuando termine el evento**, prender *Settings → Serverless / App Sleeping* en
+> `curuba-web` y `curuba-platanus` deja de facturar CPU y RAM mientras no haya tráfico, y el
+> proyecto vuelve a caber en los USD 5. No se prende antes: la primera visita después de un
+> rato paga un arranque en frío de varios segundos, y esa visita puede ser la de un juez.
 
 ---
 
@@ -269,6 +381,13 @@ al número. Si no llega nada, el **Debugger de Twilio** dice si el webhook devol
 se demoró.
 
 **5. Cerrar la puerta.** `VALIDATE_TWILIO_SIGNATURE=true` y otro mensaje.
+
+La landing va por su cuenta y no depende de ninguno de esos pasos. Antes de gastar un ciclo
+de deploy, `cd apps/web && npm run build && npm start` — si el build no pasa en local,
+tampoco va a pasar en Railway. Ya desplegada, la prueba que cierra el círculo no es el
+`curl`: es **pegar el enlace en un chat de WhatsApp y ver que salga la tarjeta con el
+logo**. Eso es lo único que confirma que el `metadataBase` quedó apuntando al dominio de
+Railway y no a `localhost`.
 
 ---
 

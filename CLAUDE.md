@@ -17,14 +17,15 @@ demostrar, no para generalidad.
 | Datos | Postgres (`pg_trgm`, `unaccent`) | Railway |
 | Canal | Twilio WhatsApp (número propio) | — |
 | PDF | `fpdf2` | — |
-| Landing | Next.js | Vercel |
+| Landing | Next.js | Railway |
 
 ## Estado
 
 ```
 apps/api/     FastAPI + Pydantic AI, va a Railway. El esqueleto camina (webhook, agente,
               memoria en RAM); faltan db.py, etl.py, tutela.py y las cuatro tools
-apps/web/     Landing en Next.js, va a Vercel. Todavía vacío
+apps/web/     Landing en Next.js, corre en Railway como el servicio `curuba-web`. Escrita
+              y desplegada; no depende de la API
 resources/
   data/raw/     Fuentes SISMED e INVIMA (~11 MB, SÍ van al repo)
   data/clean/   desabastecimiento.csv — derivado del PDF, es lo que lee el ETL

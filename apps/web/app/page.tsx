@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 // El botón es lo único que importa arriba del fold, así que no puede depender
-// de que la variable esté bien puesta en Vercel: si falta, cae al número real.
+// de que la variable esté bien puesta en Railway: si falta, cae al número real.
 const WHATSAPP =
   process.env.NEXT_PUBLIC_WHATSAPP_URL ?? "https://wa.me/12603057633?text=Hola%20Curuba";
 
