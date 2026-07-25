@@ -100,6 +100,18 @@ body {
   animation: fluye 0.55s linear infinite;
 }
 
+/* Scroll sin barra. Una barra de scroll dentro de una caja con trazo y esquinas
+   redondeadas le come el borde derecho y la cuadra; acá el contenido igual se
+   arrastra con la rueda y con el teclado, solo no se dibuja el riel. */
+@utility sin-barra {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Edge viejo */
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Apagar el movimiento sin esconder nada: `both` deja el fotograma final
    puesto, así que la página aparece completa en lugar de vacía. */
 @media (prefers-reduced-motion: reduce) {

@@ -205,11 +205,17 @@ export default function Demo() {
           El estado va como pastilla con trazo y sombra porque en este sistema el trazo va
           a los objetos, nunca al texto; y el número va en mono, que es la regla del
           DESIGN.md — la mono marca un dato, no un adorno. */}
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-8 gap-y-2">
+      {/* El encabezado usa la MISMA grilla que el cuerpo, así la celda de la derecha cae
+          exactamente encima del celular y la pastilla del estado queda de su ancho. */}
+      <header className="grid shrink-0 items-center gap-3 lg:grid-cols-[2.2fr_1fr]">
         <h1 className="font-display text-[clamp(1.6rem,2.4vw,2.4rem)] font-semibold leading-none tracking-[-0.035em] text-curuba">
           Curuba <span className="text-crema/75">· la corrida del agente, en vivo</span>
         </h1>
-        <p className="trazo sombra-sm flex items-center gap-2 rounded-full bg-curuba px-4 py-2 font-mono text-[12px] font-medium text-monte">
+        {/* Contorno crema sin relleno: es un rótulo de estado, no un objeto de la página,
+            así que no lleva sombra sólida —no tiene de qué colgar— ni compite con el
+            amarillo del grafo. El punto sí es de color, que es lo único que hay que leer
+            de un vistazo. */}
+        <p className="flex w-full items-center justify-center gap-2 rounded-full border-[3px] border-crema px-4 py-2 font-mono text-[12px] font-medium text-crema">
           <span
             className={`h-2.5 w-2.5 shrink-0 rounded-full ${
               conectado && activo ? "bg-hoja" : "bg-pulpa"
@@ -240,7 +246,7 @@ export default function Demo() {
               datasets públicos, no del modelo. */}
           <div
             ref={traza}
-            className="trazo sombra h-[16vh] shrink-0 overflow-y-auto rounded-2xl bg-curuba px-4 py-3"
+            className="trazo sombra sin-barra h-[16vh] shrink-0 overflow-y-auto rounded-[28px] bg-curuba px-5 py-4"
           >
             {pasos.length === 0 ? (
               // En cuerpo y no en mono: es una instrucción, y en este sistema la mono está
@@ -291,7 +297,7 @@ export default function Demo() {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
+            <div className="sin-barra min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
               {burbujas.length === 0 && !parcial ? (
                 <div className="flex h-full flex-col items-center justify-center gap-4 px-3 text-center">
                   <p className="text-[15px] leading-snug text-monte/70">
