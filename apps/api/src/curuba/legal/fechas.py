@@ -67,6 +67,23 @@ def fecha_larga(dia: date | None = None) -> str:
     return f"{dia.day} de {MESES[dia.month - 1]} de {dia.year}"
 
 
+def corridos_desde(inicio: date, hasta: date | None = None) -> int:
+    """Días CORRIDOS transcurridos. Fines de semana incluidos.
+
+    Hermana de `habiles_desde` y hay que tener claro cuál va en cada caso, porque
+    mezclarlas es el error fácil de este archivo:
+
+        corridos  -> las 48 horas del domicilio (Resolución 1604 de 2013)
+        hábiles   -> los 15 días de la petición (art. 14 de la Ley 1755 de 2015)
+
+    Las 48 h de la Res. 1604 no se suspenden el fin de semana: a alguien que reclamó un
+    viernes le vencen el domingo, no el martes. Contarlas como hábiles le regalaría a la
+    EPS dos días que la norma no le da.
+    """
+    hasta = hasta or date.today()
+    return max(0, (hasta - inicio).days)
+
+
 def habiles_desde(inicio: date, hasta: date | None = None) -> int:
     """Días hábiles transcurridos, contando de lunes a viernes.
 

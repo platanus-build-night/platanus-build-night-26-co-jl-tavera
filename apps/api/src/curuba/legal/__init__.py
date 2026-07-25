@@ -39,27 +39,31 @@ from curuba.legal.campos import (
 from curuba.legal.documentos import (
     AVISO,
     DOCUMENTOS,
+    MOSTRADOR,
     NOMBRES,
+    PLAZO_DOMICILIO_HORAS,
     SUPERSALUD_CANALES,
 )
 from curuba.legal.fechas import (
     MESES,
     PLAZO_PETICION,
+    corridos_desde,
     fecha_larga,
     habiles_desde,
     leer_fecha,
 )
 from curuba.legal.pdf import marcadores, render_pdf
 from curuba.legal.plantillas import PLANTILLAS, armar_texto
-from curuba.legal.ruteo import RUTAS, decidir_ruta
+from curuba.legal.ruteo import RUTAS, accion_inmediata, decidir_ruta
 from curuba.legal.texto import normalizar
 
 __all__ = [
-    "AVISO", "CAMPOS", "DOCUMENTOS", "MESES", "NOMBRES", "PLANTILLAS",
-    "PLAZO_PETICION", "RUTAS", "SUPERSALUD_CANALES", "TRIAGE", "Campo",
-    "aplica", "armar_texto", "decidir_ruta", "es_no", "es_si", "faltantes",
-    "fecha_larga", "generar", "habiles_desde", "leer_fecha", "marcadores",
-    "normalizar", "pendientes", "render_pdf", "respondido", "validar",
+    "AVISO", "CAMPOS", "DOCUMENTOS", "MESES", "MOSTRADOR", "NOMBRES", "PLANTILLAS",
+    "PLAZO_DOMICILIO_HORAS", "PLAZO_PETICION", "RUTAS", "SUPERSALUD_CANALES",
+    "TRIAGE", "Campo", "accion_inmediata", "aplica", "armar_texto", "corridos_desde",
+    "decidir_ruta", "es_no", "es_si", "faltantes", "fecha_larga", "generar",
+    "habiles_desde", "leer_fecha", "marcadores", "normalizar", "pendientes",
+    "render_pdf", "respondido", "validar",
 ]
 
 

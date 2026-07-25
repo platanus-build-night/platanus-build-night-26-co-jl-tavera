@@ -14,12 +14,15 @@ from curuba.legal.plantillas.comun import (
     dispensador,
     encabezado_persona,
     fecha,
+    hechos_del_mostrador,
     notificaciones,
     valor,
 )
 
 
 def armar(campos: dict) -> str:
+    constancia, incumplimiento = hechos_del_mostrador(campos)
+
     prescripcion = (
         f" El medicamento me fue prescrito el {fecha(campos, 'fecha_prescripcion')}."
         if respondido(campos, "fecha_prescripcion")
@@ -91,6 +94,8 @@ def armar(campos: dict) -> str:
         "incompleta.",
         "TERCERO. A la fecha de esta petición no he recibido el medicamento completo, "
         "pese a estar prescrito por mi médico tratante y a ser mi entrega un derecho.",
+        constancia,
+        incumplimiento,
         urgencia,
         municipio,
         copago,

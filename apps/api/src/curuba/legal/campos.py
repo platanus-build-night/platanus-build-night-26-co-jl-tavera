@@ -81,6 +81,15 @@ CAMPOS: dict[str, Campo] = {
         TODOS,
         tipo="fecha",
     ),
+    # Opcional a propósito: no alarga la entrevista obligatoria. Pero cuando está, el
+    # escrito puede alegar que se pidió constancia y no la dieron, que es un hecho
+    # fuerte — y `accion_inmediata` deja de insistir con el paso del mostrador.
+    "constancia": Campo(
+        "¿Te dieron algo por escrito donde conste que no te lo entregaron?",
+        "si le dieron constancia escrita de la no entrega",
+        util_en=("peticion", "tutela"),
+        tipo="si_no",
+    ),
     # ── Triage: estos cuatro deciden la ruta ──────────────────────────────
     "riesgo_vital": Campo(
         "Si no lo recibes ya, ¿corre riesgo tu vida o tu salud de forma grave?",

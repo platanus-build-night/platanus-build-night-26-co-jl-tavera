@@ -14,6 +14,7 @@ from curuba.legal.plantillas.comun import (
     dispensador,
     encabezado_persona,
     fecha,
+    hechos_del_mostrador,
     notificaciones,
     valor,
 )
@@ -70,6 +71,7 @@ def _medida_provisional(campos: dict) -> str:
 
 
 def armar(campos: dict) -> str:
+    constancia, incumplimiento = hechos_del_mostrador(campos)
     accionado = valor(campos, "eps")
     gestor = str(campos.get("gestor_farmaceutico", "") or "").strip()
     # Vincular al gestor farmacéutico no es adorno: es quien dispensa, y sin él la
@@ -157,6 +159,8 @@ def armar(campos: dict) -> str:
         f"TERCERO. El {fecha(campos, 'fecha_reclamacion')} lo reclamé en "
         f"{dispensador(campos)} y no me fue entregado, o me fue entregado de forma "
         "incompleta. A la fecha continúo sin recibirlo.",
+        constancia,
+        incumplimiento,
         hecho_peticion,
         hecho_riesgo,
         hecho_municipio,

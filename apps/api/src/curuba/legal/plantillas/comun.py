@@ -12,8 +12,9 @@ Los párrafos se separan con una línea en blanco.
 
 from __future__ import annotations
 
-from curuba.legal.campos import CAMPOS, respondido
-from curuba.legal.fechas import fecha_larga, leer_fecha
+from curuba.legal.campos import CAMPOS, es_no, respondido
+from curuba.legal.documentos import PLAZO_DOMICILIO_HORAS
+from curuba.legal.fechas import corridos_desde, fecha_larga, leer_fecha
 
 
 def valor(campos: dict, nombre: str) -> str:
@@ -73,6 +74,35 @@ def dispensador(campos: dict) -> str:
     """Dónde le toca reclamar. Si no lo sabe, una fórmula genérica que igual sirve."""
     gestor = str(campos.get("gestor_farmaceutico", "") or "").strip()
     return gestor or "el punto de dispensación asignado por la EPS"
+
+
+def hechos_del_mostrador(campos: dict) -> tuple[str, str]:
+    """Los dos hechos que salen de la Resolución 1604: constancia y 48 horas.
+
+    Van juntos porque salen del mismo momento y de la misma norma, y los usan tanto la
+    petición como la tutela. Cada uno es "" cuando no aplica, para que `bloques` lo
+    salte y el escrito no quede con huecos.
+    """
+    constancia = ""
+    if es_no(campos, "constancia"):
+        constancia = (
+            "Solicité que se me expidiera constancia escrita de la no entrega y no me fue "
+            "entregada, con lo cual la entidad dificulta la prueba de la propia falla que "
+            "generó."
+        )
+
+    incumplimiento = ""
+    reclamo = leer_fecha(campos.get("fecha_reclamacion", ""))
+    if reclamo and corridos_desde(reclamo) * 24 >= PLAZO_DOMICILIO_HORAS:
+        dias = corridos_desde(reclamo)
+        incumplimiento = (
+            f"Han transcurrido {dias} días calendario desde la reclamación, de modo que "
+            f"el plazo máximo de {PLAZO_DOMICILIO_HORAS} horas previsto en la Resolución "
+            "1604 de 2013 para la entrega de lo pendiente se encuentra ampliamente "
+            "vencido, sin que la entidad haya cumplido."
+        )
+
+    return constancia, incumplimiento
 
 
 def si_esta(campos: dict, nombre: str, plantilla: str) -> str:

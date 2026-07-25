@@ -10,8 +10,17 @@ consecuencia legal se traduce acá y no se deja a interpretación del modelo.
 from __future__ import annotations
 
 from curuba.legal.campos import TRIAGE, CAMPOS, es_si, respondido
-from curuba.legal.documentos import SUPERSALUD_CANALES
-from curuba.legal.fechas import PLAZO_PETICION, habiles_desde, leer_fecha
+from curuba.legal.documentos import (
+    MOSTRADOR,
+    PLAZO_DOMICILIO_HORAS,
+    SUPERSALUD_CANALES,
+)
+from curuba.legal.fechas import (
+    PLAZO_PETICION,
+    corridos_desde,
+    habiles_desde,
+    leer_fecha,
+)
 from curuba.legal.texto import normalizar
 
 RUTAS = {
@@ -96,4 +105,50 @@ def decidir_ruta(campos: dict) -> tuple[str, str]:
         "Es un problema de entrega y todavía no se le ha pedido nada por escrito a la "
         "EPS. Arranca el derecho de petición: es gratis, no necesita abogado y deja el "
         "radicado con fecha que sostiene la tutela después si no responden."
+    )
+
+
+def accion_inmediata(campos: dict) -> str | None:
+    """Lo que la persona puede hacer YA, antes de cualquier escrito. O None.
+
+    **No es una ruta y a propósito no lo es.** Si `decidir_ruta` devolviera "mostrador",
+    `generar_documento` se negaría a hacer la petición porque el tipo no coincidiría con
+    la ruta — y estaríamos bloqueando justo lo que no queremos bloquear. Las dos cosas se
+    suman: radicar una petición no le quita a nadie el derecho al domicilio, y es gratis.
+    Por eso esto viaja al lado de la ruta, no en su lugar.
+
+    Devuelve None cuando ya tiene la constancia (el paso está hecho) o cuando el problema
+    no es de entrega — a quien le negaron la cobertura no le sirve pedir un domicilio.
+    """
+    problema = normalizar(campos.get("tipo_problema", ""))
+    if problema in ("cobertura", "reembolso"):
+        return None
+    if es_si(campos, "constancia"):
+        return None
+
+    reclamo = leer_fecha(campos.get("fecha_reclamacion", ""))
+    if reclamo is None:
+        cierre = (
+            "Si reclamaste hace menos de dos días, el plazo de las 48 horas todavía está "
+            "corriendo. Si fue hace más, ya se venció y eso entra como un hecho en el "
+            "escrito."
+        )
+    elif corridos_desde(reclamo) * 24 < PLAZO_DOMICILIO_HORAS:
+        cierre = (
+            f"Todavía estás dentro de las {PLAZO_DOMICILIO_HORAS} horas: la EPS está a "
+            "tiempo de llevártelo a la casa, y por eso el paso 2 es el que más importa "
+            "ahora."
+        )
+    else:
+        dias = corridos_desde(reclamo)
+        cierre = (
+            f"Ya pasaron {dias} días desde que reclamaste, así que las "
+            f"{PLAZO_DOMICILIO_HORAS} horas están vencidas. Eso ya no es una espera: es "
+            "un incumplimiento, y entra como hecho en el escrito que sigue. La constancia "
+            "te sirve igual, así que vale la pena pedirla aunque sea ahora."
+        )
+
+    return (
+        "Antes de cualquier escrito, esto es lo que puede hacer HOY, apoyado en la "
+        "Resolución 1604 de 2013:\n" + MOSTRADOR + "\n" + cierre
     )
