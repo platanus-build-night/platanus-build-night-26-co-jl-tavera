@@ -190,6 +190,43 @@ a la acción es un enlace `wa.me`.
 Aplica la misma ⚠️ de la API: **son dos ajustes distintos y el segundo no hereda del
 primero**.
 
+#### Cómo se hace lo mismo por CLI
+
+El CLI **no expone** Root Directory ni Config file path: no hay bandera en `railway add` ni
+en `railway service source connect`. Se ponen por GraphQL, que sí está en el CLI. El
+servicio se crea vacío, se configura y **solo al final** se le conecta el repo, para que el
+primer build ya salga con la config buena en vez de fallar y tener que redesplegar:
+
+```bash
+railway add --service curuba-web \
+  --variables 'NEXT_PUBLIC_WHATSAPP_URL=https://wa.me/12603057633?text=Hola%20Curuba' --json
+
+railway api 'mutation($s: String!, $e: String!, $i: ServiceInstanceUpdateInput!) {
+    serviceInstanceUpdate(serviceId: $s, environmentId: $e, input: $i) }' \
+  --variables '{"s":"<serviceId>","e":"<environmentId>",
+                "i":{"rootDirectory":"apps/web","railwayConfigFile":"apps/web/railway.json"}}'
+
+railway service source connect --repo jl-tavera/curuba-platanus --branch main --service curuba-web
+```
+
+Los IDs salen de `railway service list --json` y de `railway status --json`.
+
+> ⚠️ **`serviceInstance` no muestra lo que dice el `railway.json`.** Consultarlo devuelve
+> `healthcheckPath: null`, `startCommand: null`, `watchPatterns: []` y un `builder` que
+> puede no ser el del archivo — y **eso es normal**: esa query lee solo la capa del
+> dashboard. Lo del archivo se mezcla al desplegar y aparece en el `fileServiceManifest` del
+> deployment. Leer `serviceInstance` y concluir "no quedó configurado" es un falso positivo;
+> el único lugar donde se comprueba es un deployment terminal:
+>
+> ```bash
+> railway deployment list --service curuba-web --limit 1 --json   # → meta.fileServiceManifest
+> ```
+>
+> Corolario: `railwayConfigFile` sale `null` en `curuba-platanus` y aun así su deploy trae
+> `configFile: /apps/api/railway.json`. Railway encuentra el `railway.json` que está dentro
+> del Root Directory por su cuenta. Ponerlo explícito igual no sobra — no cuesta nada y
+> quita la ambigüedad.
+
 `apps/web/railway.json` usa **`RAILPACK`**, no `NIXPACKS`. Railpack es el builder actual de
 Railway y Nixpacks está marcado como legacy; la API se quedó en Nixpacks porque ya
 funcionaba y no se cambia un builder a mitad de camino. Que los dos servicios usen builders
@@ -225,9 +262,15 @@ token de Twilio.
 De ahí sale el orden obligatorio, que no es el intuitivo:
 
 1. Crear el servicio y poner `NEXT_PUBLIC_WHATSAPP_URL`.
-2. *Settings → Networking → **Generate Domain***.
+2. *Settings → Networking → **Generate Domain*** (o `railway domain --service curuba-web`).
 3. Poner `NEXT_PUBLIC_SITE_URL` con ese dominio.
 4. **Redesplegar**, para que los pasos 2 y 3 entren al build.
+
+> **Generar el dominio dispara un redeploy solo.** Ese build ya trae `RAILWAY_PUBLIC_DOMAIN`,
+> así que el `og:image` sale bien incluso antes del paso 4 — el fallback de `layout.tsx`
+> hace su trabajo. No sirve de excusa para saltarse el redeploy: `NEXT_PUBLIC_SITE_URL` se
+> pone *después* de generar el dominio y esa sí necesita su propio build. Y en cambio poner
+> una variable **no** dispara nada: hay que pedir el redeploy a mano.
 
 Saltarse el paso 4 tiene un síntoma silencioso: `layout.tsx` arma el `metadataBase` con
 `NEXT_PUBLIC_SITE_URL` y, si falta, con `RAILWAY_PUBLIC_DOMAIN` — que **no existe hasta que
@@ -249,11 +292,21 @@ curl -s https://<dominio-web>/ | grep -o '<meta property="og:image"[^>]*>'
 Los dos `railway.json` traen `watchPatterns` (`apps/api/**` y `apps/web/**`) para que un
 cambio en la landing no reconstruya la API y al revés.
 
-> ⚠️ **Si después de un push no se despliega *nada*, es esto.** La doc de Railway no aclara
-> si los globs se evalúan contra la raíz del repo o contra el Root Directory del servicio;
-> acá se asumió la raíz. Si resultó lo otro, los patrones no matchean nunca y ningún deploy
-> sale. El arreglo es quitar `watchPatterns` de los dos archivos: un deploy de más es
-> barato, un deploy que nunca sale en medio de una demo no.
+**Los globs se evalúan contra la raíz del repo, no contra el Root Directory** — la duda que
+dejó la doc de Railway quedó resuelta en el estreno de `curuba-web` (25-07-2026). El commit
+`a20b610e` tocó solo `apps/api/**` y `resources/**`, con `apps/api/**` ya activo en la API
+desde el build anterior, y la API se desplegó. Si los globs fueran relativos al Root
+Directory, el archivo cambiado se habría leído como `src/curuba/agent.py`, `apps/api/**` no
+habría matcheado nunca y **no habría salido ningún deploy**. Salió: los patrones de los dos
+`railway.json` son correctos como están escritos.
+
+Lo que todavía no se probó es el lado negativo — que un push que toca solo `apps/web/**`
+efectivamente *no* reconstruya la API. Es el caso barato de equivocarse (un deploy de más),
+no el caro.
+
+> ⚠️ **Si después de un push no se despliega *nada*, es esto igual.** El arreglo es quitar
+> `watchPatterns` de los dos archivos: un deploy de más es barato, un deploy que nunca sale
+> en medio de una demo no.
 
 ### Cuánto cuesta esto
 
