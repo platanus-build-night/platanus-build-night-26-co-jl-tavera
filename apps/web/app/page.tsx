@@ -42,7 +42,7 @@ const FUNCIONES: {
 }[] = [
   {
     situacion: "Si tienes una fórmula",
-    titulo: "Fórmula → qué pagas",
+    titulo: "Qué te toca pagar y qué no",
     chat: [
       { de: "tu", foto: true },
       {
@@ -56,7 +56,7 @@ const FUNCIONES: {
   },
   {
     situacion: "Si estás esperando",
-    titulo: "¿Está desabastecido?",
+    titulo: "Qué dice el INVIMA, no tu EPS",
     chat: [
       { de: "tu", texto: "¿el losartán está desabastecido?" },
       {
@@ -69,7 +69,7 @@ const FUNCIONES: {
   },
   {
     situacion: "Si te lo negaron o te demoran",
-    titulo: "El escrito que procede → PDF",
+    titulo: "El escrito que procede, en PDF",
     chat: [
       {
         de: "tu",
