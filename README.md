@@ -236,10 +236,10 @@ abierto.
    PBS 2.067 · SISMED 38.731     tabla en Python
    INVIMA 783                       │  qué escrito procede
         │                           ▼
-        │ marca comercial o    fpdf2 → PDF
-        ▼ precio de mostrador        │
-   La Rebaja · Farmatodo             ▼
-   Perplexity Sonar (respaldo)  GET /f/{id} ──► Twilio adjunta el PDF
+        │ marca comercial o      fpdf2 → PDF
+        ▼ precio de mostrador       │
+   La Rebaja · Farmatodo            ▼
+   Perplexity Sonar (respaldo)   GET /f/{id} ──► Twilio adjunta el PDF
 ```
 
 Un solo agente con siete tools; el modelo decide cuál usar. No hay ruteo por palabras
@@ -301,7 +301,7 @@ ngrok http 8000
 # https://<tu-subdominio>.ngrok.io/webhooks/twilio/whatsapp
 ```
 
-El panel de `/demo` es la landing corriendo aparte, apuntada a esa API:
+El panel de `/demo` es una ruta más de la app de Next, apuntada a esa API:
 
 ```bash
 cd apps/web && npm install && npm run dev   # NEXT_PUBLIC_API_URL, si no cae a :8000
