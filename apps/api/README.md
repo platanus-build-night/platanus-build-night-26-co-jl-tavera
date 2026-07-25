@@ -59,6 +59,7 @@ apps/api/
     │   ├── __init__.py        TOOLSETS
     │   ├── deps.py            Deps
     │   ├── medicamentos.py    PBS, SISMED, INVIMA + las dos de la web
+    │   ├── droguerias.py      catálogos de La Rebaja y Farmatodo, por HTTP
     │   ├── web.py             Sonar: sub-agente, esquemas y validaciones
     │   └── ruta_legal.py      entrevista y generación
     └── legal/                 la lógica legal, sin saber del agente
@@ -106,7 +107,7 @@ no saben que existe un agente y `agent.py` importa una sola lista. `Deps` vive e
 | `buscar_medicamento(nombre)` | Busca en SISMED por similitud y devuelve hasta 8 candidatos con presentación, laboratorio, los dos techos regulados y **score**. **Y el INVIMA pegado en `desabastecimiento`** |
 | `consultar_desabastecimiento(nombre)` | Busca en el seguimiento del INVIMA; devuelve estado (`monitorizacion`, `riesgo`, `desabastecido`, `no_desabastecido`) y fecha, o dice explícitamente que no hay reportes. Queda para la pregunta directa: las dos de arriba ya lo traen |
 | `identificar_medicamento(nombre)` | Marca comercial → principio activo, buscando en la web. **Y vuelve a consultar las tres bases él mismo** con el nombre resuelto |
-| `precio_en_drogueria(nombre)` | Busca en La Rebaja, Farmatodo y Cruz Verde lo que publican hoy. Se **niega** si todavía no se consultó la cobertura |
+| `precio_en_drogueria(nombre)` | Lo que publican hoy La Rebaja y Farmatodo, leído de sus catálogos; Cruz Verde solo si entra el respaldo de Sonar. Se **niega** si todavía no se consultó la cobertura |
 | `guardar_dato_caso(campo, valor)` | Guarda una respuesta de la entrevista **y hace el triage**: devuelve la ruta que procede, el porqué y las preguntas que faltan, ya redactadas |
 | `generar_documento(tipo)` | Arma el PDF del escrito, lo guarda y devuelve su URL pública. Se **niega** si ese escrito no corresponde a la ruta |
 
@@ -179,7 +180,7 @@ flowchart TD
 
     V --> W{"¿Pregunta por el precio<br/>en la droguería?"}
     W -->|"no"| X["Dar el techo regulado y aclarar<br/>que no es el precio del mostrador"]
-    W -->|"sí"| Y["precio_en_drogueria<br/>La Rebaja · Farmatodo · Cruz Verde"]
+    W -->|"sí"| Y["precio_en_drogueria<br/>catálogos de La Rebaja y Farmatodo<br/>(Sonar de respaldo)"]
 
     Y -->|"con precio"| Z["'En la página de X, la caja de N<br/>aparece en $P — confírmalo'"]
     Y -->|"sin precio o sin resultado"| Z2["Decir dónde lo venden, sin cifra.<br/>NO usar el techo regulado en su lugar"]
@@ -221,12 +222,38 @@ Cuatro cosas se decidieron en Python y no se le dejan al modelo:
 > losartán solo contra eso no significa nada. La banda absoluta sí caza el error real:
 > un precio por tableta leído como precio de caja, o una cifra en otra moneda.
 
-**Los precios de droguería van en dos pasos, y eso tampoco es gratuito.**
-`PromptedOutput` mete el esquema JSON dentro del mensaje del usuario, y Perplexity arma
-su búsqueda web a partir de ese mensaje: con el esquema encima, Sonar contestó
-`encontrado: false` para losartán, acetaminofén e ibuprofeno — los tres. La misma
-pregunta en prosa sí encuentra la ficha con precio y URL. Así que el paso 1 le pregunta
-en español plano y el paso 2 le pasa esa prosa a Claude para estructurarla.
+**Los precios de droguería NO salen de un buscador: salen del catálogo.**
+`precio_en_drogueria` le pega directo a las dos cadenas que exponen el suyo
+(`tools/droguerias.py`) y solo cae a Sonar si las dos vienen vacías — que es también la
+única vía por la que aparece Cruz Verde, cuyo gateway pide un bearer de sesión.
+
+| Cadena | Cómo | Verificado |
+|---|---|---|
+| Drogas La Rebaja | API de catálogo de VTEX, pública y sin llave | `losartán 50` → $14.100 |
+| Farmatodo | su índice de Algolia, con la llave pública de su frontend | `losartán 50` → $11.975 |
+| Cruz Verde | solo por el respaldo de Sonar | — |
+
+Las dos cadenas en paralelo tardan **~700 ms** contra los 5–25 s de Sonar, y contestan lo
+mismo dos veces seguidas. Cuatro trampas, las cuatro medidas:
+
+- **La tienda de La Rebaja es `larebajavirtual.com`**, no `larebaja.com.co` (eso es un
+  302). El validador de hosts de Sonar no lo tenía, así que **descartaba en silencio toda
+  ficha buena de esa cadena** — la razón de fondo de que La Rebaja no apareciera nunca.
+- **VTEX quiere los espacios como `%20`.** Con `+` —que es lo que arma `params=` de
+  httpx— contesta 400.
+- **El App ID de Algolia va en MAYÚSCULAS.** En minúsculas responde 403 con la llave buena.
+- **Hay que filtrar en Python.** Los dos buscadores hacen match difuso: `losartan 50 mg`
+  en La Rebaja devuelve TRAZODONA y SILDENAFIL de segundo y tercero. Y los "kit" traen el
+  mismo `productName` que la caja suelta con 10× el precio ($24.600 vs $2.500 en
+  acetaminofén), que es la confusión más cara posible. Se exigen las palabras de ≥4 letras
+  de la consulta, la dosis ordena, y los kits se botan.
+
+**Cuando sí entra Sonar, la pregunta va en dos pasos.** `PromptedOutput` mete el esquema
+JSON dentro del mensaje del usuario, y Perplexity arma su búsqueda web a partir de ese
+mensaje: con el esquema encima, Sonar contestó `encontrado: false` para losartán,
+acetaminofén e ibuprofeno — los tres. La misma pregunta en prosa sí encuentra la ficha con
+precio y URL. Así que el paso 1 le pregunta en español plano y el paso 2 le pasa esa prosa
+a Claude para estructurarla.
 
 **Camino considerado y descartado:** `capabilities=[WebSearch()]` en el agente principal
 (OpenRouter lo soporta, es una línea). Le daría a Claude una búsqueda web sin alcance en
@@ -453,6 +480,7 @@ requieren **Basic auth** con el Account SID y el Auth Token para descargarse.
 | `CURUBA_MODEL` | Por defecto `openrouter:anthropic/claude-sonnet-5`. Verificar el slug en openrouter.ai/models |
 | `CURUBA_WEB_MODEL` | El de búsqueda web. Por defecto `openrouter:perplexity/sonar`. **No necesita llave nueva** |
 | `CURUBA_WEB_TIMEOUT` | Segundos antes de rendirse con Sonar. Por defecto 25 |
+| `CURUBA_FARMATODO_KEY` | La llave pública de solo-búsqueda del Algolia de Farmatodo. Trae un default que sirve; **está acá solo para arreglar una rotación sin desplegar** (se resaca de su `main-es2020.*.js`, en `envs.prod`) |
 | `TWILIO_ACCOUNT_SID` | Twilio |
 | `TWILIO_AUTH_TOKEN` | Twilio — también valida la firma del webhook |
 | `TWILIO_WHATSAPP_FROM` | El número, con formato `whatsapp:+57...` |

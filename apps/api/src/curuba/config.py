@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     # así que el límite no es Twilio: es la paciencia de quien está esperando.
     curuba_web_timeout: float = 25.0
 
+    # La llave PÚBLICA de solo-búsqueda que Farmatodo embebe en su propio frontend
+    # para consultar su índice de Algolia. No es un secreto y no es nuestra: va acá
+    # como variable, y no como constante del módulo, solo para poder arreglar una
+    # rotación desde Railway sin desplegar. Si algún día deja de servir, se vuelve a
+    # sacar de https://www.farmatodo.com.co/main-es2020.*.js, en `envs.prod`.
+    curuba_farmatodo_key: str = "eb9544fe7bfe7ec4c1aa5e5bf7740feb"
+
     # Railway la inyecta sola vía ${{Postgres.DATABASE_URL}}. En local se usa
     # la URL PÚBLICA del servicio de Postgres.
     database_url: str = ""

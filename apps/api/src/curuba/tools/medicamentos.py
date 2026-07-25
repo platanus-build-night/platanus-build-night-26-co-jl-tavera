@@ -10,8 +10,10 @@ precio, así que toda consulta de un medicamento trae su estado de abastecimient
 pregunta por la cobertura no sabe que el desabastecimiento se pregunta aparte, y es
 justo lo que explica por qué no se lo entregan.
 
-Las dos últimas salen a Perplexity Sonar cuando las bases no alcanzan. La maquinaria de
-esa búsqueda vive en `web.py`; acá quedan las tools porque el tema es el mismo.
+Las dos últimas salen a internet cuando las bases no alcanzan. `precio_en_drogueria` le
+pega directo a los catálogos de La Rebaja y Farmatodo (`droguerias.py`) y solo cae a
+Perplexity Sonar (`web.py`) si los dos vinieron vacíos; `identificar_medicamento` sí va
+siempre por Sonar. Acá quedan las tools porque el tema es el mismo.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
 from curuba import db
-from curuba.tools import web
+from curuba.tools import droguerias, web
 from curuba.tools.deps import Deps
 
 medicamentos = FunctionToolset()
@@ -326,7 +328,12 @@ async def precio_en_drogueria(ctx: RunContext[Deps], nombre: str) -> dict[str, A
             "cobertura primero y después vuelve a llamarme."
         )
 
-    ofertas = await web.precios_drogueria(nombre, usage=ctx.usage)
+    # Primero los catálogos de La Rebaja y Farmatodo, que contestan JSON y son
+    # deterministas. Sonar solo entra si los dos vinieron vacíos: es más lento y menos
+    # confiable, pero es la única vía por la que aparece Cruz Verde.
+    ofertas = await droguerias.buscar(nombre)
+    if not ofertas:
+        ofertas = await web.precios_drogueria(nombre, usage=ctx.usage)
     if not ofertas:
         return {
             "encontrado": False,

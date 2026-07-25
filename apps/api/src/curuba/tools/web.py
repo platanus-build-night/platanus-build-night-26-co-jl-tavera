@@ -104,8 +104,13 @@ _extractor = Agent(
 
 # Las tres cadenas que pidió el producto, en orden de prioridad. Se valida el host de
 # cada URL contra esto: una "fuente" que no sea de una de las tres no se muestra.
-# `larebaja` aparece con dos dominios según por dónde entre el buscador.
+#
+# La Rebaja aparece con varios dominios según por dónde entre el buscador, y el que
+# faltaba era el que importa: la tienda vive en `larebajavirtual.com` — `larebaja.com.co`
+# es solo un 302 hacia allá. Sin esa línea, TODA ficha real de La Rebaja que Sonar citara
+# se caía acá en silencio y la cadena no aparecía nunca.
 CADENAS = {
+    "larebajavirtual.com": "Drogas La Rebaja",
     "larebaja.com.co": "Drogas La Rebaja",
     "larebaja.co": "Drogas La Rebaja",
     "farmatodo.com.co": "Farmatodo",
