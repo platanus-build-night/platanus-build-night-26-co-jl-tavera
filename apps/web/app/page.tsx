@@ -14,18 +14,20 @@ type Burbuja = {
   foto?: boolean;
 };
 
+// Una por sección del research: el sistema no entrega, el paciente termina
+// pagando, y termina en un juzgado. La del medio es la que sostiene el titular.
 const CIFRAS = [
   {
     valor: "90 %",
     texto: "de los pacientes no recibe sus medicamentos, o los recibe a medias y con demoras",
   },
   {
-    valor: "312.500",
-    texto: "tutelas en salud en 2025, un 17,8 % más que en 2024",
+    valor: "57,3 %",
+    texto: "creció el gasto de bolsillo en salud entre 2022 y 2025 — 61,7 % en zonas rurales",
   },
   {
-    valor: "74,3 %",
-    texto: "de las tutelas se conceden: el juez le da la razón al paciente",
+    valor: "312.500",
+    texto: "tutelas en salud en 2025, un 17,8 % más que en 2024",
   },
 ];
 
@@ -39,22 +41,18 @@ const FUNCIONES: {
   nota: string;
 }[] = [
   {
-    situacion: "Si vas a comprarlo",
-    titulo: "Fórmula → precio regulado",
+    situacion: "Si tienes una fórmula",
+    titulo: "Fórmula → qué pagas",
     chat: [
       { de: "tu", foto: true },
       {
         de: "curuba",
         texto:
-          "Encontré 3 medicamentos en tu fórmula. Estos son los techos de precio regulados del canal institucional (Circular CNPMDM), no lo que te va a cobrar la droguería:",
-        lineas: [
-          "Acetaminofén 500 mg — oral x 100 → $12.400",
-          "Losartán 50 mg — oral x 30 → $8.900",
-          "Omeprazol 20 mg — oral x 14 → $6.100",
-        ],
+          "Leí 3 medicamentos. El losartán y el acetaminofén están financiados con la UPC: los reclamas en el dispensador de tu EPS pagando solo la cuota moderadora, no los compras. El omeprazol no aparece en el listado — confírmalo con tu EPS antes de pagarlo. Si te toca comprarlo, el techo regulado del canal institucional es:",
+        lineas: ["Omeprazol 20 mg — oral x 14 → $6.100"],
       },
     ],
-    nota: "Cifras ilustrativas. Los valores reales salen del corte de SISMED, y el techo es por presentación, no por unidad.",
+    nota: "Cifras ilustrativas. La cobertura sale del PBS y el techo del corte de SISMED, por presentación y no por unidad.",
   },
   {
     situacion: "Si estás esperando",
@@ -70,24 +68,45 @@ const FUNCIONES: {
     nota: "Esta es la consulta que define si el problema es del país o es de tu EPS.",
   },
   {
-    situacion: "Si te lo negaron",
-    titulo: "Tutela → PDF",
+    situacion: "Si te lo negaron o te demoran",
+    titulo: "El escrito que procede → PDF",
     chat: [
-      { de: "curuba", texto: "¿Contra qué EPS es la tutela?" },
-      { de: "tu", texto: "Sanitas" },
-      { de: "curuba", texto: "¿Qué medicamento o servicio te negaron?" },
-      { de: "tu", texto: "el losartán, llevo 3 semanas yendo" },
+      {
+        de: "tu",
+        texto:
+          "llevo tres semanas yendo a la farmacia y no me entregan el losartán, quiero poner una tutela ya",
+      },
       {
         de: "curuba",
         texto:
-          "Listo, aquí está tu tutela 📎 Revísala antes de radicarla — sobre todo los datos personales y las fechas.",
+          "Si no recibes el losartán ya, ¿corre riesgo tu vida o tu salud de forma grave?",
+      },
+      { de: "tu", texto: "no, es para la tensión. no he radicado nada" },
+      {
+        de: "curuba",
+        texto:
+          "Entonces lo que procede es un derecho de petición ante tu EPS, no la tutela: como todavía no le has pedido nada por escrito, este es el paso que toca primero y deja el radicado con fecha que sostiene la tutela después.",
+      },
+      {
+        de: "curuba",
+        texto:
+          "Aquí está tu derecho de petición 📎 La ley le da a la EPS 15 días hábiles; si no responde, ya con esa constancia sí procede la tutela.",
       },
     ],
-    nota: "Es gratuita, no requiere abogado y el juez falla en 10 días (art. 86 C.P. · Decreto 2591 de 1991, art. 29).",
+    nota: "Cuatro escritos: derecho de petición, tutela, incidente de desacato y demanda ante la Supersalud. Cuál procede lo decide una tabla en Python, no el modelo (Ley 1755 de 2015, art. 14 · art. 86 C.P. · Decreto 2591 de 1991).",
   },
 ];
 
+// En el orden en que las consulta el agente: primero si te toca pagarlo, y solo
+// después cuánto. Al revés se manda a alguien a comprar lo que ya tenía pago.
 const FUENTES = [
+  {
+    nombre: "PBS",
+    entidad: "Resolución 2808 de 2022",
+    aporta: "Qué está financiado con la UPC — o sea qué no te toca pagar",
+    corte: "corte 2026-07-24",
+    filas: "2.067 medicamentos",
+  },
   {
     nombre: "SISMED",
     entidad: "MinSalud / SISPRO",
@@ -105,6 +124,11 @@ const FUENTES = [
 ];
 
 const PRECISIONES = [
+  {
+    titulo: "«No lo encontré» no es «no está cubierto»",
+    texto:
+      "El listado del PBS no es exhaustivo y el cruce por principio activo con SISMED solo alcanza el 72,5 %. Si Curuba no lo encuentra lo dice así y manda a confirmar con la EPS, nunca que hay que comprarlo: ese falso negativo es el que hace que alguien pague de su bolsillo algo que le correspondía.",
+  },
   {
     titulo: "Es el techo institucional, no el precio del mostrador",
     texto:
@@ -246,19 +270,26 @@ export default function Home() {
               >
                 Agente de WhatsApp · Colombia
               </p>
+              {/* «Gratis, por WhatsApp» va adentro del h1 y no como otro elemento:
+                  es el mismo titular, dicho en dos alturas. Grande la promesa,
+                  chico el precio — al revés compiten. */}
               <h1
-                className="entra mt-4 max-w-[14ch] text-balance font-display text-[clamp(2.4rem,5vw,4.5rem)] font-extrabold leading-[0.94] tracking-[-0.035em] text-monte"
+                className="entra mt-4 max-w-[19ch] text-balance font-display text-[clamp(2.1rem,4.4vw,3.6rem)] font-extrabold leading-[0.94] tracking-[-0.035em] text-monte"
                 style={{ animationDelay: "60ms" }}
               >
-                Averigua cuánto debería costar tu fórmula
+                Reducimos el gasto de bolsillo de los colombianos en medicamentos.
+                <span className="mt-3 block text-[0.46em] text-monte/75">
+                  Gratis, por WhatsApp.
+                </span>
               </h1>
               <p
-                className="entra mt-4 max-w-[46ch] text-lg leading-snug text-monte/90"
+                className="entra mt-4 max-w-[50ch] text-lg leading-snug text-monte/90"
                 style={{ animationDelay: "120ms" }}
               >
-                Un agente de WhatsApp que te dice cuál es el precio regulado de los
-                medicamentos de tu fórmula, si están desabastecidos, y te arma la tutela si
-                te los niegan.
+                ¿Cuánto debería costar tu medicamento? ¿Y qué hacer si tu EPS no te lo
+                entrega? Manda una foto de tu fórmula o del producto: te decimos si te toca
+                pagarlo y cuánto, si está desabastecido, y te armamos el reclamo listo para
+                radicar. Gratis.
               </p>
               <a
                 href={WHATSAPP}
@@ -268,13 +299,13 @@ export default function Home() {
                 <IconoWhatsApp className="h-5 w-5" />
                 Escríbele por WhatsApp
               </a>
-              <div className="entra mt-9" style={{ animationDelay: "240ms" }}>
+              <div className="entra mt-8" style={{ animationDelay: "240ms" }}>
                 <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-monte/70">
                   Con datos públicos de
                 </p>
                 <p className="mt-1.5 font-display text-lg font-bold text-monte">
-                  SISMED <span className="font-normal text-monte/60">(MinSalud)</span> ·
-                  INVIMA
+                  PBS <span className="font-normal text-monte/60">(MinSalud)</span> · SISMED
+                  · INVIMA
                 </p>
               </div>
             </div>
@@ -305,10 +336,11 @@ export default function Home() {
                       { de: "tu", foto: true },
                       {
                         de: "curuba",
-                        texto: "Encontré 3 medicamentos. Estos son los techos regulados:",
+                        texto:
+                          "Leí 3 medicamentos. Dos los cubre tu EPS: esos no los compras.",
                         lineas: [
-                          "Acetaminofén 500 mg → $12.400",
-                          "Losartán 50 mg → $8.900",
+                          "Acetaminofén 500 mg → cubierto",
+                          "Losartán 50 mg → cubierto",
                           "Omeprazol 20 mg → $6.100",
                         ],
                       },
@@ -333,9 +365,10 @@ export default function Home() {
             ))}
           </div>
           <p className="mt-10 max-w-[76ch] font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-crema/70">
-            Defensoría del Pueblo, 2025 — encuesta en puntos de dispensación (n=3.449). La
-            variación de 2025 es 17,8 % contra la serie de 265.173 tutelas, no el 17,92 %
-            que titula la prensa sobre una base redondeada.
+            Defensoría del Pueblo, 2025 — encuesta en puntos de dispensación (n=3.449) ·
+            Afidro / Algebra Labs sobre datos DANE. La variación de 2025 es 17,8 % contra la
+            serie de 265.173 tutelas, no el 17,92 % que titula la prensa sobre una base
+            redondeada.
           </p>
         </section>
 
@@ -377,11 +410,11 @@ export default function Home() {
             De dónde salen los datos
           </h2>
           <p className="mt-4 max-w-[52ch] text-lg leading-snug text-crema/90">
-            De dos fuentes públicas, congeladas en un corte que queda escrito. Ningún precio
-            sale de un modelo.
+            De tres fuentes públicas, congeladas en un corte que queda escrito. Ningún
+            precio sale de un modelo.
           </p>
 
-          <div className="mt-10 grid gap-5 sm:grid-cols-2">
+          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {FUENTES.map((f) => (
               <article key={f.nombre} className="trazo sombra rounded-3xl bg-curuba p-6">
                 <div className="flex items-baseline justify-between gap-3">
@@ -401,7 +434,7 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {PRECISIONES.map((p) => (
               <article
                 key={p.titulo}
@@ -426,8 +459,10 @@ export default function Home() {
               Curuba <strong>no da asesoría médica ni jurídica</strong>. Los precios son
               techos regulados del SISMED para el canal institucional, no lo que cobra un
               punto de venta. El estado de desabastecimiento es el del último corte
-              publicado por el INVIMA y puede haber cambiado. La tutela que genera es un{" "}
-              <strong>borrador que debe revisarse antes de radicarse</strong>.
+              publicado por el INVIMA y puede haber cambiado. Que un medicamento no aparezca
+              en el listado del PBS no significa que no esté cubierto. Los escritos legales
+              que genera son{" "}
+              <strong>borradores que deben revisarse antes de radicarse</strong>.
             </p>
           </div>
         </section>

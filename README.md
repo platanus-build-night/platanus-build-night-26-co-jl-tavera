@@ -2,11 +2,13 @@
 
 # Curuba
 
-**Un agente de WhatsApp que te dice cuál es el precio regulado de los medicamentos de tu
-fórmula, si están desabastecidos, y te arma la tutela si te los niegan.**
+**Reducimos el gasto de bolsillo de los colombianos en medicamentos: por WhatsApp te
+decimos si te toca pagarlo y cuánto, si está desabastecido, y te armamos el escrito legal
+que procede.**
 
-*A WhatsApp agent for Colombian patients: prescription pricing against the regulated
-SISMED ceilings, INVIMA shortage lookups, and generated tutela drafts.*
+*A WhatsApp agent for Colombian patients: PBS coverage lookups, prescription pricing
+against the regulated SISMED ceilings, INVIMA shortage status, and generated legal drafts
+— petition, tutela, contempt motion or Supersalud claim, whichever actually applies.*
 
 Platanus Build Night — Bogotá @ Buk · Hacker: Jose Luis Tavera ([@jl-tavera](https://github.com/jl-tavera))
 
@@ -21,28 +23,37 @@ medias y con demoras.**
 Cuando eso ocurre el paciente tiene tres caminos. Ninguno es navegable sin información que
 hoy existe, es pública, y está en formatos que ningún paciente va a abrir:
 
-- **Comprarlo de forma particular.** Los precios máximos están regulados y publicados por
-  el Ministerio de Salud en SISMED — en un CSV de 38.731 filas. Sin esa referencia el
-  paciente no tiene contra qué comparar lo que le piden en el mostrador.
+- **Comprarlo de forma particular.** Antes de eso está la pregunta que casi nadie hace: si
+  el medicamento está financiado con la UPC, no hay que comprarlo — se reclama en el
+  dispensador de la EPS pagando solo la cuota moderadora, y eso está en el listado del PBS
+  de la Resolución 2808 de 2022. Si de verdad le toca comprarlo, los precios máximos están
+  regulados y publicados por el Ministerio de Salud en SISMED — en un CSV de 38.731 filas.
+  Sin esas dos referencias el paciente no tiene contra qué comparar lo que le piden en el
+  mostrador, ni cómo saber que no tenía que pagarlo.
 - **Esperar a que llegue.** No tiene manera de distinguir si el medicamento está
   desabastecido en todo el país o si su EPS simplemente no está cumpliendo. Esa
   distinción define qué debe hacer después, y la respuesta está en un PDF mensual del
   INVIMA de 93 páginas, organizado por principio activo.
-- **Interponer una tutela.** Es gratuita, no requiere abogado, el juez falla en 10 días y
-  el paciente gana la mayoría de las veces. Pero exige entender los requisitos de
-  procedibilidad y redactar un documento jurídico. Una tutela mal formulada no se pierde
-  por falta de razón: se cae antes de que el juez mire el fondo.
+- **Reclamarlo por la vía legal.** Y acá no hay un camino, hay cuatro —derecho de
+  petición, tutela, incidente de desacato y demanda ante la Supersalud— que no son
+  intercambiables: cuál procede depende de si hay riesgo vital, de si ya se radicó algo,
+  de si el problema es de entrega o de cobertura. Todos son gratuitos y ninguno requiere
+  abogado, pero exigen entender los requisitos de procedibilidad y redactar un documento
+  jurídico. Un escrito mal escogido o mal formulado no se pierde por falta de razón: se
+  cae antes de que el juez mire el fondo.
 
 **Curuba tiene tres funciones porque el paciente tiene tres caminos** — una por camino, en
 el único canal que ya tiene abierto.
 
 ### Las cifras
 
+El gasto de bolsillo en salud de los hogares creció **57,3 %** entre 2022 y 2025 —
+**61,7 %** en zonas rurales contra 26,4 % en las ciudades. Detrás está el mismo hecho:
 **90 %** de los pacientes encuestados en puntos de dispensación no recibió sus
-medicamentos, o los recibió a medias y con demoras (n=3.449, Defensoría del Pueblo 2025).
-El gasto de bolsillo en salud creció **57,3 %** entre 2022 y 2025. Y en 2025 se radicaron
-**312.500 tutelas en salud**, un 17,8 % más que en 2024; el juez le da la razón al paciente
-el **74,3 %** de las veces.
+medicamentos, o los recibió a medias y con demoras (n=3.449, Defensoría del Pueblo 2025),
+y el **61 %** dijo que terminaría comprándolos de forma particular, lo que le cuesta entre
+el **7 % y el 90 % de sus ingresos**. Y en 2025 se radicaron **312.500 tutelas en salud**,
+un 17,8 % más que en 2024; el juez le da la razón al paciente el **74,3 %** de las veces.
 
 Las cifras completas —la serie histórica desde 2020, el desglose por ingresos y por zona
 rural, las causales que tumban una tutela— están en
@@ -198,7 +209,7 @@ abierto.
                             GET /f/{id} ──► Twilio adjunta el PDF
 ```
 
-Un solo agente con cinco tools; el modelo decide cuál usar. No hay ruteo por palabras
+Un solo agente con siete tools; el modelo decide cuál usar. No hay ruteo por palabras
 clave, así que las tres funciones conviven en la misma conversación.
 
 **Lo único que el modelo no decide es cuál escrito procede.** Eso sale de una tabla de
@@ -225,7 +236,7 @@ ngrok http 8000
 # https://<tu-subdominio>.ngrok.io/webhooks/twilio/whatsapp
 ```
 
-Escribiendo `reiniciar` por WhatsApp se borra la conversación y el borrador de tutela.
+Escribiendo `reiniciar` por WhatsApp se borra la conversación y el borrador del escrito.
 
 ## Documentación
 
@@ -241,5 +252,6 @@ Escribiendo `reiniciar` por WhatsApp se borra la conversación y el borrador de 
 
 *Curuba no da asesoría médica ni jurídica. Los precios son techos regulados del SISMED para
 el canal institucional, no lo que cobra un punto de venta. El estado de desabastecimiento es
-el del último corte publicado por el INVIMA y puede haber cambiado. La tutela que genera es
-un **borrador que debe revisarse antes de radicarse**.*
+el del último corte publicado por el INVIMA y puede haber cambiado. Que un medicamento no
+aparezca en el listado del PBS no significa que no esté cubierto. Los escritos legales que
+genera son **borradores que deben revisarse antes de radicarse**.*

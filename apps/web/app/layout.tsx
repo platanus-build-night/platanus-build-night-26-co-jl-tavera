@@ -35,20 +35,25 @@ const siteUrl =
     ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
     : "http://localhost:3000");
 
+// El oneliner de build-night-project.json, tal cual: es lo que se ve al
+// compartir el enlace por WhatsApp y lo que lee el jurado.
 const descripcion =
-  "Un agente de WhatsApp que te dice cuál es el precio regulado de los medicamentos " +
-  "de tu fórmula, si están desabastecidos, y te arma la tutela si te los niegan.";
+  "Reducimos el gasto de bolsillo de los colombianos en medicamentos: por WhatsApp te " +
+  "decimos si te toca pagarlo y cuánto, si está desabastecido, y te armamos el escrito " +
+  "legal que procede.";
+
+const titulo = "Curuba — Menos gasto de bolsillo en medicamentos, por WhatsApp";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Curuba — Averigua cuánto debería costar tu fórmula",
+  title: titulo,
   description: descripcion,
   icons: { icon: "/project-logo.png" },
   openGraph: {
     type: "website",
     locale: "es_CO",
     siteName: "Curuba",
-    title: "Curuba — Averigua cuánto debería costar tu fórmula",
+    title: titulo,
     description: descripcion,
     images: [{ url: "/project-logo.png", width: 1000, height: 1000, alt: "Curuba" }],
   },

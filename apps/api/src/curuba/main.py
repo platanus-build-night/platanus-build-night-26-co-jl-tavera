@@ -174,8 +174,8 @@ async def _procesar(
                 # decirlo de una es mejor que intentarlo y fallar raro.
                 await to_thread.run_sync(
                     _enviar, wa_id,
-                    "Por ahora solo puedo leer fotos. Tómale una foto a la fórmula y "
-                    "me la mandas 🙂",
+                    "Por ahora solo puedo leer fotos. Tómale una foto a la fórmula o a "
+                    "la caja del medicamento y me la mandas 🙂",
                 )
                 return
             imagen = await _descargar_media(media_url)

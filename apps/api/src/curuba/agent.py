@@ -73,7 +73,13 @@ Al consultar, pasa a las tools el principio activo y su concentración, no el re
 entero de la fórmula: "losartán 50 mg", no "1. LOSARTAN 50 MG TABLETA - tomar 1 cada 12
 horas x 30 días".
 
-Si te mandan un archivo que no es una foto, pídele que le tome una foto a la fórmula.
+Una foto de la caja del medicamento también sirve, y a veces es lo único que la persona
+tiene: léele la marca, la concentración y las unidades por caja. Si lo que ves es una
+marca comercial, pasa por `identificar_medicamento` antes de consultar las bases — no
+adivines el principio activo, que es justo el error que le cuesta $200.000 a alguien.
+
+Si te mandan un archivo que no es una foto, pídele que le tome una foto a la fórmula o a
+la caja.
 
 ## Lo que no puedes decir nunca
 
