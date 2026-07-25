@@ -4,17 +4,16 @@ El servicio que está detrás del número de WhatsApp. Recibe los mensajes que r
 Twilio, corre el agente y responde: cotiza fórmulas contra SISMED, consulta
 desabastecimientos del INVIMA y genera el PDF de una tutela.
 
-> **Estado: los datos y la ruta legal funcionan de punta a punta; falta leer fotos.**
-> Existen `config.py`, `db.py`, `agent.py`, `main.py`, `etl.py`, `schema.sql` y los
-> paquetes `tools/` y `legal/`.
-> Las tres fuentes están cargadas en Postgres (2.067 / 38.731 / 783 filas)
-> y el agente contesta con las cinco tools. La entrevista legal guarda en `casos`,
-> `decidir_ruta()` escoge mecanismo, los cuatro PDF se generan y `GET /f/{id}` los sirve
-> para que Twilio los adjunte.
-> **Todavía falta** la lectura de fotos de fórmulas (`BinaryContent` en el webhook), que
-> es lo único que queda del alcance original.
+> **Estado: camina de punta a punta.** Existen `config.py`, `db.py`, `agent.py`,
+> `main.py`, `etl.py`, `schema.sql` y los paquetes `tools/` y `legal/`.
+> Las tres fuentes están cargadas en Postgres (2.067 / 38.731 / 783 filas) y el agente
+> contesta con las siete tools. La entrevista legal guarda en `casos`, `decidir_ruta()`
+> escoge mecanismo, los cuatro PDF se generan y `GET /f/{id}` los sirve para que Twilio
+> los adjunte. Las fotos de fórmulas se leen (`BinaryContent`), y cuando el paciente
+> dice una marca comercial en vez de un principio activo, `identificar_medicamento` la
+> traduce buscando en la web.
 
-**Lo importante de la arquitectura: es un solo agente con cinco tools, no tres
+**Lo importante de la arquitectura: es un solo agente con siete tools, no tres
 endpoints.** WhatsApp es una sola conversación, así que no hay ruteo por palabras clave
 ni menús — el modelo decide qué tool usar. Eso es lo que permite que "mándame una foto de
 tu fórmula", "¿el losartán está desabastecido?" y "no me entregan el losartán" convivan en
@@ -59,7 +58,8 @@ apps/api/
     ├── tools/                 las tools, un módulo por grupo
     │   ├── __init__.py        TOOLSETS
     │   ├── deps.py            Deps
-    │   ├── medicamentos.py    PBS, SISMED, INVIMA
+    │   ├── medicamentos.py    PBS, SISMED, INVIMA + las dos de la web
+    │   ├── web.py             Sonar: sub-agente, esquemas y validaciones
     │   └── ruta_legal.py      entrevista y generación
     └── legal/                 la lógica legal, sin saber del agente
         ├── __init__.py        API pública + generar()
@@ -98,18 +98,119 @@ Esa cadena es lo que permite probar el ruteo sin base de datos y sin modelo.
 no saben que existe un agente y `agent.py` importa una sola lista. `Deps` vive en
 `tools/deps.py` por la misma razón.
 
-## Las cinco tools
+## Las siete tools
 
 | Tool | Qué hace |
 |---|---|
 | `consultar_cobertura(nombre)` | Busca en el PBS si lo financia la UPC. Devuelve la cobertura (`upc`, `condicionada`, `mipres`, `excluido`), qué significa y la aclaración textual |
-| `buscar_medicamento(nombre)` | Busca en SISMED por similitud y devuelve hasta 8 candidatos con presentación, laboratorio, precio institucional y **score** |
+| `buscar_medicamento(nombre)` | Busca en SISMED por similitud y devuelve hasta 8 candidatos con presentación, laboratorio, los dos techos regulados y **score** |
 | `consultar_desabastecimiento(nombre)` | Busca en el seguimiento del INVIMA; devuelve estado (`monitorizacion`, `riesgo`, `desabastecido`, `no_desabastecido`) y fecha, o dice explícitamente que no hay reportes |
+| `identificar_medicamento(nombre)` | Marca comercial → principio activo, buscando en la web. **Y vuelve a consultar las tres bases él mismo** con el nombre resuelto |
+| `precio_en_drogueria(nombre)` | Busca en La Rebaja, Farmatodo y Cruz Verde lo que publican hoy. Se **niega** si todavía no se consultó la cobertura |
 | `guardar_dato_caso(campo, valor)` | Guarda una respuesta de la entrevista **y hace el triage**: devuelve la ruta que procede, el porqué y las preguntas que faltan, ya redactadas |
 | `generar_documento(tipo)` | Arma el PDF del escrito, lo guarda y devuelve su URL pública. Se **niega** si ese escrito no corresponde a la ruta |
 
-Las dos últimas son `@agente.tool` (necesitan `RunContext` para saber de qué número es la
-conversación); las tres de datos son `tool_plain`.
+Cuatro son `@agente.tool` porque necesitan `RunContext`: las dos de la ruta legal (para
+saber de qué número es la conversación), `identificar_medicamento` y
+`precio_en_drogueria` (para sumar el gasto del sub-agente al de la corrida), y
+`consultar_cobertura` (para anotar lo que ya consultó). `buscar_medicamento` y
+`consultar_desabastecimiento` siguen siendo `tool_plain`.
+
+### El árbol de decisión
+
+```mermaid
+flowchart TD
+    A["Mensaje de WhatsApp"] --> B{"¿Trae adjunto?"}
+    B -->|"image/*"| C["Descargar de Twilio con Basic auth<br/>→ BinaryContent"]
+    B -->|"otro adjunto"| D["Pedirle una FOTO:<br/>solo se leen imágenes"]
+    B -->|"solo texto"| E["Texto del paciente"]
+
+    C --> F["Leer la fórmula y empezar la respuesta<br/>diciendo qué medicamentos leyó"]
+    F --> G{"¿Varios medicamentos<br/>o uno solo?"}
+    E --> G
+
+    G -->|"varios"| I["Uno por uno, el mismo árbol"]
+    G -->|"uno solo"| H["Contestar, y después preguntar<br/>si tiene la fórmula médica"]
+    H --> I
+
+    I --> J["consultar_cobertura · PBS"]
+    J -->|"encontrado: false"| K{"¿Suena a marca comercial?"}
+    J -->|"encontrado: true"| L{"cobertura"}
+
+    K -->|"sí"| M["identificar_medicamento<br/>Sonar: marca → principio activo<br/>+ re-consulta las 3 bases"]
+    K -->|"no"| N["'No lo encontré en el listado,<br/>confírmalo con tu EPS'<br/>NUNCA 'no está cubierto'"]
+    M -->|"confianza alta/media<br/>y país = Colombia"| L
+    M -->|"confianza baja, sin fuentes<br/>o país ≠ Colombia"| N
+
+    L -->|"upc"| O["Reclamarlo en el dispensador.<br/>Solo cuota moderadora"]
+    L -->|"condicionada"| P["Leerle la aclaración TAL CUAL"]
+    L -->|"mipres"| Q["Que el médico lo formule por MIPRES.<br/>La EPS igual debe entregarlo"]
+    L -->|"excluido"| R["Este sí le toca comprarlo"]
+
+    O --> S{"¿Se lo entregaron?"}
+    P --> S
+    Q --> S
+    S -->|"no"| T["consultar_desabastecimiento · INVIMA"]
+    T --> U["Ruta legal: guardar_dato_caso"]
+
+    R --> V["buscar_medicamento · SISMED<br/>techo institucional y comercial"]
+    S -->|"sí, pero pregunta el precio"| V
+
+    V --> W{"¿Pregunta por el precio<br/>en la droguería?"}
+    W -->|"no"| X["Dar el techo regulado y aclarar<br/>que no es el precio del mostrador"]
+    W -->|"sí"| Y["precio_en_drogueria<br/>La Rebaja · Farmatodo · Cruz Verde"]
+
+    Y -->|"con precio"| Z["'En la página de X, la caja de N<br/>aparece en $P — confírmalo'"]
+    Y -->|"sin precio o sin resultado"| Z2["Decir dónde lo venden, sin cifra.<br/>NO usar el techo regulado en su lugar"]
+```
+
+**El orden no se puede saltar, y eso está en código.** Si el primer mensaje del hilo es
+"¿cuánto vale el adalimumab en la droguería?", `precio_en_drogueria` levanta `ModelRetry`
+y el agente tiene que pasar por `consultar_cobertura` antes. No es celo: el adalimumab
+está financiado con la UPC, y contestar el precio de frente manda a alguien a gastar
+$800.000 que la EPS tenía que ponerle. Verificado — contesta la cobertura y le dice que
+no lo compre.
+
+### La red de seguridad en la web
+
+Las tres bases están indexadas por **principio activo**, y el paciente habla de
+**marcas**: "Dolex", "Noxpirin", "Winadeine F". Sin traducción, esas tres consultas
+mueren en `encontrado: false`. `identificar_medicamento` sale a Perplexity Sonar
+(`perplexity/sonar` por OpenRouter — **la misma llave, sin dependencia nueva**), y con el
+principio activo que encuentra **vuelve a consultar las tres bases él mismo** en vez de
+pedirle al modelo que las llame otra vez: ahorra tres turnos de ~3 s y garantiza que el
+bucle cierre.
+
+Cuatro cosas se decidieron en Python y no se le dejan al modelo:
+
+- **La pregunta que se le hace a Sonar la escribe Python**, no el modelo. Incluye que el
+  nombre venga en **nomenclatura colombiana**: sin eso Sonar contesta "paracetamol" y
+  `coverage` dice `ACETAMINOFÉN` — cero filas, justo en el medicamento más común del país.
+- **Sin fuentes, la confianza baja a `baja`.** Y las fuentes se validan: la primera
+  versión devolvía `['1', '4', '5']`, los numeritos de las citas, no las URL.
+- **Si el `pais` no es Colombia, se reporta como no encontrado.** Las marcas se repiten
+  entre países con composiciones distintas.
+- **Un precio fuera de la banda de plausibilidad se descarta** (queda `precio: null` y el
+  agente dice dónde lo venden, sin cifra).
+
+> **Por qué la banda es absoluta y no un cruce contra SISMED.** El plan original
+> comparaba el precio scrapeado contra el techo del SISMED. No funciona, y se midió:
+> `acetaminofén 500` no está en SISMED (cero filas), y `losartán 50` solo trae ARAMAX,
+> que es *amlodipino + losartán*, en cajas de 200/500/1500 mg. Comparar una caja x30 de
+> losartán solo contra eso no significa nada. La banda absoluta sí caza el error real:
+> un precio por tableta leído como precio de caja, o una cifra en otra moneda.
+
+**Los precios de droguería van en dos pasos, y eso tampoco es gratuito.**
+`PromptedOutput` mete el esquema JSON dentro del mensaje del usuario, y Perplexity arma
+su búsqueda web a partir de ese mensaje: con el esquema encima, Sonar contestó
+`encontrado: false` para losartán, acetaminofén e ibuprofeno — los tres. La misma
+pregunta en prosa sí encuentra la ficha con precio y URL. Así que el paso 1 le pregunta
+en español plano y el paso 2 le pasa esa prosa a Claude para estructurarla.
+
+**Camino considerado y descartado:** `capabilities=[WebSearch()]` en el agente principal
+(OpenRouter lo soporta, es una línea). Le daría a Claude una búsqueda web sin alcance en
+una app de salud, donde podría contestar una pregunta de cobertura con un blog en vez de
+con la tabla `coverage`, y la consulta que va al buscador no sería nuestra.
 
 **`consultar_cobertura` va primero y el prompt lo dice.** Si el medicamento está
 financiado con la UPC, el precio es casi irrelevante: la ruta es el dispensador de la EPS
@@ -329,6 +430,8 @@ requieren **Basic auth** con el Account SID y el Auth Token para descargarse.
 | `DATABASE_URL` | Postgres. Railway la inyecta sola; en local, la URL pública del servicio |
 | `OPENROUTER_API_KEY` | OpenRouter |
 | `CURUBA_MODEL` | Por defecto `openrouter:anthropic/claude-sonnet-5`. Verificar el slug en openrouter.ai/models |
+| `CURUBA_WEB_MODEL` | El de búsqueda web. Por defecto `openrouter:perplexity/sonar`. **No necesita llave nueva** |
+| `CURUBA_WEB_TIMEOUT` | Segundos antes de rendirse con Sonar. Por defecto 25 |
 | `TWILIO_ACCOUNT_SID` | Twilio |
 | `TWILIO_AUTH_TOKEN` | Twilio — también valida la firma del webhook |
 | `TWILIO_WHATSAPP_FROM` | El número, con formato `whatsapp:+57...` |
@@ -337,6 +440,13 @@ requieren **Basic auth** con el Account SID y el Auth Token para descargarse.
 
 El modelo necesita visión para leer fotos de fórmulas. Las imágenes se pasan con
 `BinaryContent(data=..., media_type=...)` dentro de la lista del prompt.
+
+**Y hay que sacarlas del historial antes de guardarlo.** `all_messages_json()` serializa
+la foto entera en base64: una de 2 MB se vuelven ~2,7 MB en `conversations.messages` **y
+se re-suben a OpenRouter en cada turno siguiente**, así que el turno 5 de la demo va
+lento y caro por una foto del turno 1. `agent._sin_fotos()` las reemplaza por un
+marcador de texto antes de persistir — lo que el modelo necesita recordar de la fórmula
+ya está en su propia respuesta.
 
 ## Cómo correrlo
 
@@ -438,6 +548,24 @@ Dos detalles que no son cosméticos:
 - **`DISTINCT ON` porque un mismo producto tiene varios CUM.** Hay 8.612 grupos con
   descripción y precio idénticos; sin eso, los 8 candidatos pueden ser la misma caja ocho
   veces. Las presentaciones que solo cambian de laboratorio sí se conservan.
+
+**Y la trampa tiene una cara B, que apareció al leer fotos.** `a <% b` mide si `a` cabe
+dentro de un pedazo de `b`, o sea que solo sirve cuando la **consulta es corta y el texto
+es largo**. En `medications` eso se cumple. En `coverage` es al revés: `search_text` es
+**solo el principio activo**. Y un renglón de fórmula llega largo:
+
+```
+word_similarity('adalimumab 40 mg/0.8 ml solucion inyectable', 'adalimumab')  -> 0
+word_similarity('adalimumab', 'adalimumab 40 mg/0.8 ml solucion inyectable')  -> 1.00
+```
+
+Cero filas en cobertura **no es un resultado neutro**: el agente lo reporta como "no lo
+encontré en el listado" cuando el `ADALIMUMAB` sí está y está financiado con la UPC. Es
+el falso negativo de $200.000, disparado por mandar una foto en vez de escribir el
+nombre. `coverage` y `shortages` consultan en **las dos direcciones** (`<%` y `%>`) y el
+score es el mayor de las dos. El `OR` tumba el índice GIN a seq scan, pero son 2.067 y
+783 filas y no se nota; en `medications`, con 38.731, sí se notaría —medido: de 300 ms a
+1 s— y además ahí no hace falta.
 
 Devolverle al agente los candidatos **con su score** y que desambigüe o pregunte. No
 escoger el primero en silencio: un precio equivocado en una app de salud es peor que no

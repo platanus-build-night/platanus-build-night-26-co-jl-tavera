@@ -28,8 +28,8 @@ demostrar, no para generalidad.
 
 ```
 apps/api/     FastAPI + Pydantic AI, va a Railway. Camina de punta a punta: webhook,
-              agente con cinco tools (en `tools/`), datos en Postgres y la ruta legal
-              con sus cuatro PDF (en `legal/`). Falta leer fotos de fórmulas
+              agente con siete tools (en `tools/`), datos en Postgres, fotos de fórmulas
+              y la ruta legal con sus cuatro PDF (en `legal/`)
 apps/web/     Landing en Next.js, corre en Railway como el servicio `curuba-web`. Escrita
               y desplegada; no depende de la API
 resources/
