@@ -32,7 +32,10 @@ type Nodo = {
 };
 
 export const NODOS: Nodo[] = [
-  { id: "whatsapp", x: 24, y: 300, w: 170, h: 96, titulo: "WhatsApp", sub: "Twilio · el paciente escribe" },
+  // "entra y sale" y no "el paciente escribe": este nodo tiene dos aristas —el mensaje que
+  // llega y la respuesta que vuelve— y el rótulo tiene que decir eso. De paso cabe en una
+  // línea, que con la caja angosta era el otro problema.
+  { id: "whatsapp", x: 24, y: 300, w: 170, h: 96, titulo: "WhatsApp", sub: "Twilio · entra y sale" },
   { id: "agente", x: 246, y: 262, w: 210, h: 172, titulo: "curuba", sub: "Pydantic AI Agent\n7 tools · 2 toolsets" },
   { id: "modelo", x: 246, y: 40, w: 210, h: 140, titulo: "Claude Sonnet 5", sub: "OpenRouter" },
 
@@ -42,13 +45,13 @@ export const NODOS: Nodo[] = [
   { id: "identificar_medicamento", x: 512, y: 290, w: 286, h: 62, titulo: "identificar_medicamento", sub: "marca → principio activo", tool: true },
   { id: "precio_en_drogueria", x: 512, y: 366, w: 286, h: 62, titulo: "precio_en_drogueria", sub: "precio de mostrador", tool: true },
 
-  { id: "guardar_dato_caso", x: 512, y: 484, w: 286, h: 62, titulo: "guardar_dato_caso", sub: "la entrevista legal", tool: true },
-  { id: "generar_documento", x: 512, y: 560, w: 286, h: 62, titulo: "generar_documento", sub: "arma el escrito", tool: true },
+  { id: "guardar_dato_caso", x: 512, y: 496, w: 286, h: 62, titulo: "guardar_dato_caso", sub: "la entrevista legal", tool: true },
+  { id: "generar_documento", x: 512, y: 572, w: 286, h: 62, titulo: "generar_documento", sub: "arma el escrito", tool: true },
 
   { id: "postgres", x: 872, y: 130, w: 304, h: 116, titulo: "Postgres · pg_trgm", sub: "coverage 2.067 · sismed 38.731\nshortages 783" },
   { id: "perplexity", x: 872, y: 286, w: 304, h: 100, titulo: "Perplexity Sonar", sub: "3 sub-agentes · web_cache" },
-  { id: "decidir_ruta", x: 872, y: 466, w: 304, h: 98, titulo: "decidir_ruta()", sub: "cuál de los 4 escritos procede\nlo decide Python, no el modelo", destacado: true },
-  { id: "pdf", x: 872, y: 594, w: 304, h: 84, titulo: "fpdf2 → documents", sub: "el PDF, servido en /f/{uuid}" },
+  { id: "decidir_ruta", x: 872, y: 460, w: 304, h: 98, titulo: "decidir_ruta()", sub: "cuál de los 4 escritos procede\nlo decide Python, no el modelo", destacado: true },
+  { id: "pdf", x: 872, y: 590, w: 304, h: 84, titulo: "fpdf2 → documents", sub: "el PDF, servido en /f/{uuid}" },
 ];
 
 // Qué prende cada tool río abajo. No es decorativo: es lo que hace el código —
@@ -66,9 +69,13 @@ export const RIO_ABAJO: Record<string, string[]> = {
 
 export const TOOLS = Object.keys(RIO_ABAJO);
 
+// Los dos toolsets, como cajas punteadas alrededor de sus tools. La separación entre las
+// dos no es estética: el rótulo se dibuja ENCIMA del borde de arriba —como el legend de un
+// fieldset— y con las cajas pegadas el de `ruta_legal` caía sobre el borde de
+// `medicamentos` y se perdía.
 const GRUPOS = [
-  { titulo: "medicamentos", x: 496, y: 34, w: 318, h: 410 },
-  { titulo: "ruta_legal", x: 496, y: 456, w: 318, h: 180 },
+  { titulo: "medicamentos", x: 496, y: 36, w: 318, h: 404 },
+  { titulo: "ruta_legal", x: 496, y: 470, w: 318, h: 176 },
 ];
 
 type Arista = { de: string; a: string };
@@ -107,11 +114,16 @@ function curva(de: string, a: string): string {
 // La respuesta volviendo al paciente: sale del agente por abajo y devuelve a WhatsApp.
 const VUELTA = `M ${246 + 105} ${262 + 172} C ${300} ${520}, ${60} ${500}, ${24 + 85} ${300 + 96}`;
 
+// El nodo apagado es un wireframe sobre el verde —tinta crema, relleno casi transparente—
+// y el encendido es un bloque sólido con tinta oscura. La primera versión pintaba los dos
+// rellenos (crema apagado, curuba encendido) y proyectados se parecían demasiado: el camino
+// encendido casi no se distinguía. Invertir el esquema es gratis en esta paleta porque pasa
+// AA en las dos direcciones, y es lo que hace que prenderse SE VEA.
 const PINTA: Record<EstadoNodo, string> = {
-  inactivo: "bg-crema text-monte",
-  corriendo: "bg-pulpa text-monte pulso",
-  listo: "bg-curuba text-monte",
-  reintento: "bg-curuba text-monte",
+  inactivo: "border-crema/30 bg-crema/[0.07] text-crema",
+  corriendo: "border-monte bg-pulpa text-monte pulso",
+  listo: "border-monte bg-curuba text-monte",
+  reintento: "border-monte bg-curuba text-monte",
 };
 
 function corta(texto: string, tope: number): string {
@@ -202,11 +214,16 @@ export default function Grafo({
         />
       </svg>
 
+      {/* El rótulo del toolset va montado SOBRE el borde de arriba de su caja, con fondo
+          monte que corta la línea punteada: es el truco del legend de un fieldset. Puesto
+          arriba del borde —como estaba— el de `ruta_legal` aterrizaba encima de la caja de
+          `medicamentos` y no se leía. Así no puede chocar con nada: siempre cae en el
+          canal que separa los dos grupos. */}
       {GRUPOS.map((g) => (
         <p
           key={g.titulo}
-          className="absolute font-mono text-[clamp(8px,0.85cqw,13px)] uppercase tracking-[0.18em] text-curuba/70"
-          style={{ left: `${(g.x / W) * 100}%`, top: `${((g.y - 22) / H) * 100}%` }}
+          className="absolute -translate-y-1/2 whitespace-nowrap bg-monte px-[0.7cqw] font-mono text-[clamp(8px,0.85cqw,13px)] font-medium tracking-[0.06em] text-curuba"
+          style={{ left: `${((g.x + 24) / W) * 100}%`, top: `${(g.y / H) * 100}%` }}
         >
           {g.titulo} · FunctionToolset
         </p>
@@ -218,8 +235,16 @@ export default function Grafo({
         return (
           <div
             key={n.id}
-            className={`trazo sombra-sm absolute flex flex-col justify-center overflow-hidden rounded-2xl px-[1.1cqw] transition-colors duration-200 ${PINTA[estado]} ${
-              n.destacado && estado === "inactivo" ? "bg-curuba/85" : ""
+            // `border-[3px]` y no la utilidad `trazo`: el color del borde cambia con el
+            // estado —monte cuando el nodo está sólido, crema cuando es wireframe sobre el
+            // verde—, y `trazo` lo fija en monte, que sobre el fondo desaparece.
+            // La sombra sólida también: colgada de un nodo apagado no tiene de qué colgar.
+            className={`absolute flex flex-col justify-center overflow-hidden rounded-2xl border-[3px] px-[1.1cqw] transition-colors duration-200 ${
+              estado === "inactivo" ? "" : "sombra-sm"
+            } ${PINTA[estado]} ${
+              // El nodo del argumento del producto no se apaga del todo: es el que hay que
+              // ver aunque la corrida no haya pasado por la ruta legal.
+              n.destacado && estado === "inactivo" ? "border-curuba/60 bg-curuba/15" : ""
             }`}
             style={{
               left: `${(n.x / W) * 100}%`,
@@ -244,18 +269,21 @@ export default function Grafo({
             {/* Los args reemplazan al subtítulo en vez de sumarse: en una caja de tool no
                 caben los dos, y mientras la corrida pasa por ahí lo que importa es con qué
                 la llamó el modelo, no lo que la tool hace en general. */}
+            {/* Estos tres van con `opacity` y no con un color fijo: la tinta del nodo cambia
+                con el estado (monte cuando está sólido, crema cuando es wireframe), así que
+                un `text-monte/75` quemado desaparecía en los apagados. */}
             {arg ? (
-              <p className="mt-[0.3cqw] truncate font-mono text-[clamp(8px,0.8cqw,12px)] text-monte/85">
+              <p className="mt-[0.3cqw] truncate font-mono text-[clamp(8px,0.8cqw,12px)] opacity-85">
                 {corta(arg, 40)}
               </p>
             ) : n.sub ? (
-              <p className="mt-[0.25cqw] whitespace-pre-line text-[clamp(8px,0.88cqw,13px)] leading-tight text-monte/75">
+              <p className="mt-[0.25cqw] whitespace-pre-line text-[clamp(8px,0.88cqw,13px)] leading-tight opacity-70">
                 {n.sub}
               </p>
             ) : null}
 
             {n.id === "modelo" && contadores ? (
-              <p className="mt-[0.3cqw] font-mono text-[clamp(8px,0.82cqw,12px)] leading-tight text-monte/80">
+              <p className="mt-[0.3cqw] font-mono text-[clamp(8px,0.82cqw,12px)] leading-tight opacity-80">
                 {contadores.input_tokens.toLocaleString("es-CO")} tok in ·{" "}
                 {contadores.output_tokens.toLocaleString("es-CO")} out
                 <br />

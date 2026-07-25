@@ -200,25 +200,30 @@ export default function Demo() {
   return (
     <main className="flex h-svh flex-col gap-3 bg-monte p-3 lg:p-4">
       {/* ── Encabezado ───────────────────────────────────────────────────── */}
-      <header className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-curuba">
-          Curuba <span className="text-crema/60">· la corrida, en vivo</span>
+      {/* Dos elementos y ya: el título y el estado. Lo memorable de esta pantalla es el
+          grafo prendiéndose, así que acá arriba nada compite con él.
+          El estado va como pastilla con trazo y sombra porque en este sistema el trazo va
+          a los objetos, nunca al texto; y el número va en mono, que es la regla del
+          DESIGN.md — la mono marca un dato, no un adorno. */}
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-8 gap-y-2">
+        <h1 className="font-display text-[clamp(1.6rem,2.4vw,2.4rem)] font-semibold leading-none tracking-[-0.035em] text-curuba">
+          Curuba <span className="text-crema/75">· la corrida del agente, en vivo</span>
         </h1>
-        <p className="font-mono text-[11px] text-crema/70">
+        <p className="trazo sombra-sm flex items-center gap-2 rounded-full bg-curuba px-4 py-2 font-mono text-[12px] font-medium text-monte">
+          <span
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+              conectado && activo ? "bg-hoja" : "bg-pulpa"
+            }`}
+          />
           {!activo
             ? "falta CURUBA_DEMO_WA en la API"
             : conectado
               ? `escuchando ${numero}`
               : "reconectando…"}
-          <span
-            className={`ml-2 inline-block h-2 w-2 rounded-full align-middle ${
-              conectado && activo ? "bg-hoja" : "bg-pulpa"
-            }`}
-          />
         </p>
       </header>
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[3fr_1fr]">
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[2.2fr_1fr]">
         {/* ── El grafo y la traza ────────────────────────────────────────── */}
         <section className="flex min-h-0 min-w-0 flex-col gap-3">
           <div className="trazo sombra min-h-0 flex-1 overflow-hidden rounded-[28px] bg-monte p-3">
@@ -235,22 +240,28 @@ export default function Demo() {
               datasets públicos, no del modelo. */}
           <div
             ref={traza}
-            className="trazo h-[19vh] shrink-0 overflow-y-auto rounded-2xl bg-crema px-3 py-2"
+            className="trazo sombra h-[16vh] shrink-0 overflow-y-auto rounded-2xl bg-curuba px-4 py-3"
           >
             {pasos.length === 0 ? (
-              <p className="font-mono text-[11px] text-monte/50">
-                la traza de las tools aparece acá cuando llegue un mensaje
+              // En cuerpo y no en mono: es una instrucción, y en este sistema la mono está
+              // reservada para lo que es un dato rastreable a una fuente.
+              <p className="text-[14px] leading-snug text-monte/70">
+                Escríbele al bot y acá aparece lo que devolvió cada tool.
               </p>
             ) : (
               <ol className="space-y-1.5">
                 {pasos.map((p) => (
-                  <li key={p.id} className="font-mono text-[11px] leading-snug text-monte">
+                  <li key={p.id} className="font-mono text-[12px] leading-snug text-monte">
                     <span className="font-medium">
                       {p.reintento ? "↻" : "→"} {p.tool}
                     </span>{" "}
                     <span className="text-monte/70">{p.args}</span>
                     {p.resultado ? (
-                      <span className={p.reintento ? "text-pulpa" : "text-monte/80"}>
+                      // El reintento se distingue con el glifo ↻ y tinta plena, NO con
+                      // color: sobre el amarillo, el naranja de `pulpa` da ~1,4:1 y
+                      // desaparece — es el caso que DESIGN.md ya descartó para el blanco
+                      // sobre naranja.
+                      <span className={p.reintento ? "font-medium text-monte" : "text-monte/80"}>
                         {" ⟶ "}
                         {p.resultado}
                       </span>
@@ -265,53 +276,45 @@ export default function Demo() {
         </section>
 
         {/* ── El celular ─────────────────────────────────────────────────── */}
-        <section className="flex min-h-0 flex-col gap-2">
-          <div className="trazo sombra flex min-h-0 flex-1 flex-col rounded-[2rem] bg-monte p-2">
-            <div className="trazo flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] bg-crema">
-              <div className="flex shrink-0 items-center gap-2 border-b-[3px] border-monte bg-hoja px-3 py-2">
-                <IconoWhatsApp className="h-5 w-5 shrink-0 text-monte" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold leading-none text-monte">Curuba</p>
-                  <p className="mt-1 truncate font-mono text-[10px] leading-none text-monte/80">
-                    {numero || "sin número"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
-                {burbujas.length === 0 && !parcial ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center">
-                    <p className="text-[13px] leading-snug text-monte/70">
-                      Escríbele al bot y este panel se mueve solo.
-                    </p>
-                    <a
-                      href={WHATSAPP}
-                      className="trazo sombra-sm rounded-full bg-hoja px-4 py-2 font-mono text-[11px] font-medium text-monte"
-                    >
-                      abrir WhatsApp
-                    </a>
-                  </div>
-                ) : null}
-
-                {burbujas.map((b, i) => (
-                  <Burbuja key={i} b={b} />
-                ))}
-
-                {parcial ? (
-                  <Burbuja b={{ de: "curuba", texto: parcial }} escribiendo />
-                ) : null}
-
-                <div ref={fin} />
+        {/* Sin aviso legal acá abajo: el CLAUDE.md lo exige en el pie del PDF, en la
+            respuesta de WhatsApp y en la landing, y esta es una pantalla de tarima que no
+            es ninguna de las tres. Sigue saliendo donde toca. */}
+        <section className="trazo sombra flex min-h-0 flex-col rounded-[2rem] bg-monte p-2.5">
+          <div className="trazo flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] bg-crema">
+            <div className="flex shrink-0 items-center gap-2.5 border-b-[3px] border-monte bg-hoja px-4 py-3">
+              <IconoWhatsApp className="h-6 w-6 shrink-0 text-monte" />
+              <div className="min-w-0">
+                <p className="truncate font-semibold leading-none text-monte">Curuba</p>
+                <p className="mt-1.5 truncate font-mono text-[11px] leading-none text-monte/80">
+                  {numero || "sin número"}
+                </p>
               </div>
             </div>
-          </div>
 
-          {/* El aviso no se quita ni se achica. */}
-          <p className="shrink-0 text-[10px] leading-tight text-crema/70">
-            Curuba <strong className="font-semibold">no da asesoría médica ni jurídica</strong>. Los
-            precios son techos regulados del SISMED para el canal institucional. Los escritos son
-            borradores que deben revisarse antes de radicarse.
-          </p>
+            <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
+              {burbujas.length === 0 && !parcial ? (
+                <div className="flex h-full flex-col items-center justify-center gap-4 px-3 text-center">
+                  <p className="text-[15px] leading-snug text-monte/70">
+                    Escríbele al bot y este panel se mueve solo.
+                  </p>
+                  <a
+                    href={WHATSAPP}
+                    className="trazo sombra-sm rounded-full bg-hoja px-4 py-2 font-mono text-[12px] font-medium text-monte"
+                  >
+                    abrir WhatsApp
+                  </a>
+                </div>
+              ) : null}
+
+              {burbujas.map((b, i) => (
+                <Burbuja key={i} b={b} />
+              ))}
+
+              {parcial ? <Burbuja b={{ de: "curuba", texto: parcial }} escribiendo /> : null}
+
+              <div ref={fin} />
+            </div>
+          </div>
         </section>
       </div>
     </main>
@@ -321,8 +324,9 @@ export default function Demo() {
 function Burbuja({ b, escribiendo = false }: { b: Burbuja; escribiendo?: boolean }) {
   return (
     <div className={`flex ${b.de === "tu" ? "justify-end" : "justify-start"}`}>
+      {/* 15px y no 13: esto se proyecta en una pantalla y se lee desde el fondo del salón. */}
       <div
-        className={`trazo max-w-[88%] rounded-2xl px-3 py-2 text-[13px] leading-snug text-monte ${
+        className={`trazo max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-snug text-monte ${
           b.de === "tu" ? "bg-hoja" : "bg-white"
         }`}
       >
@@ -349,14 +353,14 @@ function Burbuja({ b, escribiendo = false }: { b: Burbuja; escribiendo?: boolean
             href={b.documento.url}
             target="_blank"
             rel="noreferrer"
-            className="trazo mt-2 flex items-center gap-2 rounded-lg bg-crema px-2 py-1.5"
+            className="trazo mt-2.5 flex items-center gap-2.5 rounded-lg bg-crema px-2.5 py-2"
           >
-            <span aria-hidden="true" className="text-base leading-none">
+            <span aria-hidden="true" className="text-lg leading-none">
               📄
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-[12px] font-medium">{b.documento.nombre}</span>
-              <span className="block font-mono text-[9px] uppercase tracking-wide text-monte/70">
+              <span className="block truncate text-[13px] font-medium">{b.documento.nombre}</span>
+              <span className="block font-mono text-[10px] uppercase tracking-wide text-monte/70">
                 pdf · borrador
               </span>
             </span>
