@@ -300,13 +300,29 @@ Directory, el archivo cambiado se habría leído como `src/curuba/agent.py`, `ap
 habría matcheado nunca y **no habría salido ningún deploy**. Salió: los patrones de los dos
 `railway.json` son correctos como están escritos.
 
-Lo que todavía no se probó es el lado negativo — que un push que toca solo `apps/web/**`
-efectivamente *no* reconstruya la API. Es el caso barato de equivocarse (un deploy de más),
-no el caro.
+El lado negativo también quedó probado, con el commit `c4380dc` — que tocó solo
+`resources/docs/` y no matcheaba ninguno de los dos patrones:
 
-> ⚠️ **Si después de un push no se despliega *nada*, es esto igual.** El arreglo es quitar
-> `watchPatterns` de los dos archivos: un deploy de más es barato, un deploy que nunca sale
-> en medio de una demo no.
+```
+web: a69cb575 SKIPPED c4380dc2 | api: 2b506a78 SKIPPED c4380dc2
+```
+
+**Filtrar no es lo mismo que no pasar nada.** Railway igual crea un registro de deployment
+por servicio y lo marca **`SKIPPED`**; el deploy que estaba corriendo sigue activo y
+sirviendo. Así que el escenario "no se desplegó nada y no sé por qué" **es diagnosticable**:
+
+```bash
+railway deployment list --service curuba-web --limit 1 --json   # ¿SKIPPED?
+```
+
+| Lo que ves | Qué significa |
+|---|---|
+| `SKIPPED` | Los `watchPatterns` filtraron el push a propósito. Es el comportamiento correcto |
+| Ningún deployment nuevo | El push no llegó a GitHub, o Railway no está mirando esa rama |
+
+> ⚠️ Si un push que **sí** debía desplegar sale `SKIPPED`, el patrón está mal escrito. El
+> arreglo es quitar `watchPatterns` de los dos archivos: un deploy de más es barato, un
+> deploy que nunca sale en medio de una demo no.
 
 ### Cuánto cuesta esto
 
