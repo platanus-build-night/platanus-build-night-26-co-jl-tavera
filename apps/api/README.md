@@ -102,9 +102,9 @@ no saben que existe un agente y `agent.py` importa una sola lista. `Deps` vive e
 
 | Tool | Qué hace |
 |---|---|
-| `consultar_cobertura(nombre)` | Busca en el PBS si lo financia la UPC. Devuelve la cobertura (`upc`, `condicionada`, `mipres`, `excluido`), qué significa y la aclaración textual |
-| `buscar_medicamento(nombre)` | Busca en SISMED por similitud y devuelve hasta 8 candidatos con presentación, laboratorio, los dos techos regulados y **score** |
-| `consultar_desabastecimiento(nombre)` | Busca en el seguimiento del INVIMA; devuelve estado (`monitorizacion`, `riesgo`, `desabastecido`, `no_desabastecido`) y fecha, o dice explícitamente que no hay reportes |
+| `consultar_cobertura(nombre)` | Busca en el PBS si lo financia la UPC. Devuelve la cobertura (`upc`, `condicionada`, `mipres`, `excluido`), qué significa y la aclaración textual. **Y el INVIMA pegado en `desabastecimiento`** |
+| `buscar_medicamento(nombre)` | Busca en SISMED por similitud y devuelve hasta 8 candidatos con presentación, laboratorio, los dos techos regulados y **score**. **Y el INVIMA pegado en `desabastecimiento`** |
+| `consultar_desabastecimiento(nombre)` | Busca en el seguimiento del INVIMA; devuelve estado (`monitorizacion`, `riesgo`, `desabastecido`, `no_desabastecido`) y fecha, o dice explícitamente que no hay reportes. Queda para la pregunta directa: las dos de arriba ya lo traen |
 | `identificar_medicamento(nombre)` | Marca comercial → principio activo, buscando en la web. **Y vuelve a consultar las tres bases él mismo** con el nombre resuelto |
 | `precio_en_drogueria(nombre)` | Busca en La Rebaja, Farmatodo y Cruz Verde lo que publican hoy. Se **niega** si todavía no se consultó la cobertura |
 | `guardar_dato_caso(campo, valor)` | Guarda una respuesta de la entrevista **y hace el triage**: devuelve la ruta que procede, el porqué y las preguntas que faltan, ya redactadas |
@@ -115,6 +115,27 @@ saber de qué número es la conversación), `identificar_medicamento` y
 `precio_en_drogueria` (para sumar el gasto del sub-agente al de la corrida), y
 `consultar_cobertura` (para anotar lo que ya consultó). `buscar_medicamento` y
 `consultar_desabastecimiento` siguen siendo `tool_plain`.
+
+**El INVIMA no espera a que el modelo lo pida.** `_con_invima()` compone cualquier
+consulta de medicamento con `_desabasto()` y las corre en paralelo con `asyncio.gather`,
+así que `consultar_cobertura` y `buscar_medicamento` devuelven el estado de
+abastecimiento adentro sin costar tiempo (`identificar_medicamento` ya lo traía). La
+razón es que el paciente que pregunta "¿me lo cubre la EPS?" no sabe que el
+desabastecimiento se pregunta aparte — y es justo lo que explica por qué no se lo
+entregan. Dejárselo a criterio del modelo era perder el caso más útil.
+
+Y como ahora llega en todas las consultas, **Python decide si es noticia**: `_desabasto`
+calcula `hay_alerta` (`desabastecido`, `riesgo` o `monitorizacion` — el conjunto
+`ALERTAS`) y el prompt solo lo menciona si es `true`. Sin ese filtro, el modelo le
+contaría a alguien que preguntó un precio que su medicamento tuvo un seguimiento cerrado:
+`no_desabastecido` son 373 de las 783 filas. El camino automático además pide 3
+candidatos y no 8, porque esto viaja en cada turno y una fórmula trae cuatro medicamentos.
+
+> **`hay_alerta` mira solo el mejor score, no todos los candidatos.** Con `any()` sobre
+> los tres se prendía en casi toda consulta y no filtraba nada: "acetaminofén 500 mg" trae
+> `PARACETAMOL (ACETAMINOFÉN) TABLETA 500 mg` en 0,74 con el caso cerrado y detrás, en
+> 0,65, otra presentación que sí está en monitorización. La alerta la manda la fila que de
+> verdad corresponde al medicamento, no la que se le parezca de lejos.
 
 ### El árbol de decisión
 
@@ -133,7 +154,7 @@ flowchart TD
     G -->|"uno solo"| H["Contestar, y después preguntar<br/>si tiene la fórmula médica"]
     H --> I
 
-    I --> J["consultar_cobertura · PBS"]
+    I --> J["consultar_cobertura · PBS<br/>+ INVIMA en el mismo llamado"]
     J -->|"encontrado: false"| K{"¿Suena a marca comercial?"}
     J -->|"encontrado: true"| L{"cobertura"}
 
@@ -150,10 +171,10 @@ flowchart TD
     O --> S{"¿Se lo entregaron?"}
     P --> S
     Q --> S
-    S -->|"no"| T["consultar_desabastecimiento · INVIMA"]
+    S -->|"no"| T["El INVIMA ya llegó con la cobertura:<br/>si hay_alerta, esa es la explicación"]
     T --> U["Ruta legal: guardar_dato_caso"]
 
-    R --> V["buscar_medicamento · SISMED<br/>techo institucional y comercial"]
+    R --> V["buscar_medicamento · SISMED<br/>techo institucional y comercial<br/>+ INVIMA en el mismo llamado"]
     S -->|"sí, pero pregunta el precio"| V
 
     V --> W{"¿Pregunta por el precio<br/>en la droguería?"}

@@ -5,12 +5,19 @@ candidatos. No es adorno: es la forma de que "no lo encontré" no se pueda confu
 "la respuesta es no". Y el significado de cada estado se traduce **acá, en Python**, no
 se deja a interpretación del modelo — `mipres` NO es "cómprelo usted".
 
+El INVIMA no espera a que el modelo lo pida: `_con_invima` lo pega a la cobertura y al
+precio, así que toda consulta de un medicamento trae su estado de abastecimiento. Quien
+pregunta por la cobertura no sabe que el desabastecimiento se pregunta aparte, y es
+justo lo que explica por qué no se lo entregan.
+
 Las dos últimas salen a Perplexity Sonar cuando las bases no alcanzan. La maquinaria de
 esa búsqueda vive en `web.py`; acá quedan las tools porque el tema es el mismo.
 """
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pydantic_ai import ModelRetry, RunContext
@@ -47,6 +54,12 @@ ESTADOS = {
                         "desabastecido. Ojo, esto no es lo mismo que 'no hay reportes'.",
     None: "La fuente no trae el estado de esta fila.",
 }
+
+# Cuáles de esos estados son noticia para el paciente. Se decide acá y no en el prompt
+# porque ahora el INVIMA llega en TODAS las consultas: sin este filtro el modelo
+# terminaría contándole a alguien que preguntó un precio que su medicamento tuvo un
+# seguimiento cerrado hace ocho meses. `no_desabastecido` son 373 de las 783 filas.
+ALERTAS = {"desabastecido", "riesgo", "monitorizacion"}
 
 
 # Los tres cuerpos van en helpers y no dentro de las tools porque
@@ -114,31 +127,61 @@ async def _precio(nombre: str) -> dict[str, Any]:
     }
 
 
-async def _desabasto(nombre: str) -> dict[str, Any]:
-    filas = await db.consultar_desabastecimiento(nombre)
+async def _desabasto(nombre: str, limite: int = 8) -> dict[str, Any]:
+    filas = await db.consultar_desabastecimiento(nombre, limite)
     if not filas:
         return {
             "encontrado": False,
+            "hay_alerta": False,
             "nota": "No hay reportes del INVIMA sobre este medicamento. No es lo mismo "
                     "que el estado 'no desabastecido', que sí es un caso que el INVIMA "
-                    "revisó y cerró.",
+                    "revisó y cerró. No es noticia: no se lo menciones si no preguntó.",
             "candidatos": [],
         }
+    candidatos = [
+        {
+            "nombre": f["nombre"],
+            "estado": f["estado"],
+            "significado": ESTADOS.get(f["estado"], ESTADOS[None]),
+            "fecha_ultimo_seguimiento": (
+                f["fecha_seguimiento"].isoformat() if f["fecha_seguimiento"] else None
+            ),
+            "score": float(f["score"]),
+        }
+        for f in filas
+    ]
+    # `hay_alerta` es la señal de si esto se cuenta o no. Que el modelo no tenga que
+    # deducir de `estado` cuál merece interrumpir la respuesta.
+    #
+    # Se mira SOLO el mejor score, no todos los candidatos: "acetaminofén 500 mg" trae
+    # PARACETAMOL (ACETAMINOFÉN) TABLETA 500 mg en 0,74 con el caso cerrado, y detrás una
+    # presentación distinta en 0,65 que sí está en monitorización. Con `any()` sobre los
+    # tres, la alerta se prendía en casi toda consulta y el filtro no filtraba nada.
+    mejor = max(c["score"] for c in candidatos)
     return {
         "encontrado": True,
-        "candidatos": [
-            {
-                "nombre": f["nombre"],
-                "estado": f["estado"],
-                "significado": ESTADOS.get(f["estado"], ESTADOS[None]),
-                "fecha_ultimo_seguimiento": (
-                    f["fecha_seguimiento"].isoformat() if f["fecha_seguimiento"] else None
-                ),
-                "score": float(f["score"]),
-            }
-            for f in filas
-        ],
+        "hay_alerta": any(
+            c["estado"] in ALERTAS for c in candidatos if c["score"] >= mejor
+        ),
+        "candidatos": candidatos,
     }
+
+
+async def _con_invima(
+    nombre: str, consulta: Callable[[str], Awaitable[dict[str, Any]]]
+) -> dict[str, Any]:
+    """Le pega el estado del INVIMA a una consulta de medicamento.
+
+    Las dos van en paralelo — son dos conexiones del pool — así que el desabastecimiento
+    no le cuesta tiempo a la respuesta. Va acá y no en el prompt porque el que pregunta
+    "¿me lo cubre la EPS?" no sabe que el desabastecimiento se pregunta aparte, y es
+    justo lo que explica por qué no se lo van a entregar.
+
+    Pide solo 3 candidatos: esto viaja en cada turno de la conversación y 8 filas del
+    INVIMA por medicamento —en una fórmula son cuatro— es ruido, no información.
+    """
+    base, invima = await asyncio.gather(consulta(nombre), _desabasto(nombre, limite=3))
+    return base | {"desabastecimiento": invima}
 
 
 # ── Las tools ─────────────────────────────────────────────────────────────
@@ -150,12 +193,15 @@ async def consultar_cobertura(ctx: RunContext[Deps], nombre: str) -> dict[str, A
     Es la pregunta que más plata le ahorra al paciente: si está financiado, lo reclama en
     el dispensador de su EPS en vez de comprarlo.
 
+    Trae además el estado del INVIMA en `desabastecimiento`: no tienes que llamar
+    `consultar_desabastecimiento` por este medicamento.
+
     Args:
         nombre: el principio activo o el nombre que dijo el paciente, tal cual.
     """
     # Queda anotado para que `precio_en_drogueria` sepa que ya se preguntó lo primero.
     ctx.deps.coberturas_consultadas.add(nombre.strip().lower())
-    return await _cobertura(nombre)
+    return await _con_invima(nombre, _cobertura)
 
 
 @medicamentos.tool_plain
@@ -165,15 +211,22 @@ async def buscar_medicamento(nombre: str) -> dict[str, Any]:
     El precio es el techo del canal institucional, NO lo que cobra una droguería. Solo
     están los medicamentos bajo control directo de precios, que son una minoría.
 
+    Trae además el estado del INVIMA en `desabastecimiento`: no tienes que llamar
+    `consultar_desabastecimiento` por este medicamento.
+
     Args:
         nombre: el nombre o principio activo, como lo escribió el paciente.
     """
-    return await _precio(nombre)
+    return await _con_invima(nombre, _precio)
 
 
 @medicamentos.tool_plain
 async def consultar_desabastecimiento(nombre: str) -> dict[str, Any]:
     """Dice si el INVIMA tiene un medicamento en seguimiento por desabastecimiento.
+
+    Úsala solo si el paciente pregunta directamente por el abastecimiento y todavía no
+    has consultado ese medicamento: `consultar_cobertura` y `buscar_medicamento` ya te
+    devuelven este mismo dato adentro.
 
     Args:
         nombre: el nombre o principio activo, como lo escribió el paciente.
