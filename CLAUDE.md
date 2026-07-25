@@ -3,7 +3,12 @@
 Agente de WhatsApp para pacientes en Colombia. Hace tres cosas: (1) lee una fórmula
 médica —texto o foto— extrae los medicamentos y los cotiza contra SISMED; (2) consulta
 si un medicamento está desabastecido según INVIMA, cuando el usuario lo pregunta;
-(3) hace las preguntas de procedibilidad y genera el PDF de una tutela.
+(3) hace el triage de la **ruta legal** y genera el PDF del escrito que procede.
+
+La (3) son cuatro escritos, no uno: derecho de petición, tutela, incidente de desacato y
+demanda ante la función jurisdiccional de la Supersalud. **Cuál procede lo decide
+`legal.decidir_ruta()` en Python, nunca el modelo** — escoger mal el mecanismo es el modo
+de falla real del producto.
 
 Proyecto de hackathon (Platanus Build Night). Optimizar para que funcione y se pueda
 demostrar, no para generalidad.
@@ -22,8 +27,9 @@ demostrar, no para generalidad.
 ## Estado
 
 ```
-apps/api/     FastAPI + Pydantic AI, va a Railway. El esqueleto camina (webhook, agente,
-              memoria en RAM); faltan db.py, etl.py, tutela.py y las cuatro tools
+apps/api/     FastAPI + Pydantic AI, va a Railway. Camina de punta a punta: webhook,
+              agente con cinco tools (en `tools/`), datos en Postgres y la ruta legal
+              con sus cuatro PDF (en `legal/`). Falta leer fotos de fórmulas
 apps/web/     Landing en Next.js, corre en Railway como el servicio `curuba-web`. Escrita
               y desplegada; no depende de la API
 resources/
@@ -54,8 +60,11 @@ entorno y las trampas conocidas. Ese es el spec, no este archivo.
   (`buscar_medicamento`, `consultar_desabastecimiento`) — el modelo escoge mejor.
 - **Todo el SQL debe quedar en `db.py`.** Ninguna query suelta en `agent.py` ni en
   `main.py`.
-- **Mantener pocos archivos.** Antes de crear uno nuevo, extender el que ya existe.
-  La API son 7 archivos Python a propósito.
+- **Un paquete por concern, archivos planos adentro.** La raíz de `curuba/` se mantiene
+  corta —`main`, `config`, `db`, `agent`, `etl`— y lo que crece se vuelve paquete:
+  `tools/` (un módulo por grupo de tools) y `legal/` (texto, documentos, fechas, campos,
+  ruteo, plantillas, pdf). Dentro de un paquete, un archivo por responsabilidad y sin
+  anidar de más. No crear un módulo suelto en la raíz para algo que le cabe a un paquete.
 - Config solo por variables de entorno, nunca hardcodeada.
 
 ## Comandos
@@ -68,8 +77,11 @@ uv pip compile pyproject.toml -o requirements.txt    # regenerar para Railway
 
 PYTHONPATH=src uv run python -m curuba.agent         # REPL del agente, sin WhatsApp
 PYTHONPATH=src uv run python -m curuba.db            # aplicar schema.sql a mano
-uv run python -m curuba.etl                          # cargar resources/data/ (aún no existe)
+PYTHONPATH=src uv run python -m curuba.etl           # cargar resources/data/ a Postgres
 ```
+
+En el REPL, `reiniciar` borra la conversación **y el caso** — se usa todo el tiempo
+probando la entrevista legal, que si no arrastra los campos de la corrida anterior.
 
 El REPL solo necesita `OPENROUTER_API_KEY` y `DATABASE_URL`: sirve para iterar el prompt
 sin tocar Twilio. Para probar el webhook completo en local no hace falta túnel — se le
@@ -152,10 +164,11 @@ Cuatro trampas al agregar más:
    manda aparte por la API REST desde un `BackgroundTasks`. Si esto se rompe, Twilio
    reintenta en silencio y llegan mensajes duplicados.
 2. **El PDF y el español.** Registrar `DejaVuSans.ttf` explícitamente
-   (`pdf.add_font('DejaVu', '', ruta, uni=True)`); las fuentes por defecto dañan las
-   tildes y la ñ. Y aparte: `strftime('%B')` sigue el locale del sistema y en el
-   contenedor sale en inglés — genera "24 de July de 2026". Los meses en español van en
-   una constante.
+   (`pdf.add_font('DejaVu', '', ruta)`) o las tildes y la ñ salen dañadas. **Sin
+   `uni=True`:** ese parámetro desapareció en fpdf2 2.8 y pasarlo revienta con
+   `TypeError`. Y aparte: `strftime('%B')` sigue el locale del sistema y en el contenedor
+   sale en inglés — genera "24 de July de 2026". Los meses en español están en
+   `legal.MESES`.
 3. **El match de medicamentos nunca es exacto.** Una fórmula escrita a mano dice
    "acetaminofen 500" y SISMED dice `ACETAMINOFÉN 500 MG TABLETA RECUBIERTA`. Se usa
    similitud por trigramas y se le devuelven al agente los candidatos **con su score**

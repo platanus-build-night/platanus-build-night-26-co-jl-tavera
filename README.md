@@ -104,19 +104,46 @@ que no lo tenga en seguimiento no significa que haya stock en tu barrio. Curuba 
 esa diferencia al responder. El conteo por estado y las trampas del listado están en
 [`resources/data/README.md`](resources/data/README.md).
 
-### 3. Tutela
+### 3. La ruta legal
 
 Si te negaron o te están demorando un medicamento, Curuba te hace las preguntas de
-procedibilidad —una por mensaje, en lenguaje sencillo— y te devuelve el PDF.
+procedibilidad —una por mensaje, en lenguaje sencillo— y te devuelve el PDF **del escrito
+que procede**, que no siempre es la tutela:
 
-> **Curuba:** ¿Contra qué EPS es la tutela?
-> **Tú:** Sanitas
-> **Curuba:** ¿Qué medicamento o servicio te negaron?
-> **Tú:** el losartán, llevo 3 semanas yendo
-> **Curuba:** ¿Ya pusiste la queja o la solicitud ante la EPS antes de esto?
+| Escrito | Cuándo procede |
+|---|---|
+| **Derecho de petición** ante la EPS | No hay riesgo inmediato y todavía no has pedido nada por escrito |
+| **Acción de tutela** | Corre riesgo tu vida (va directa, con medida provisional), o ya radicaste y se venció el plazo |
+| **Incidente de desacato** | Ya hay fallo de tutela y la EPS no cumple |
+| **Demanda ante la Supersalud** | El problema es de cobertura o de reembolso, no de entrega |
+
+**Escoger mal el mecanismo es el error que cuesta semanas.** Llevarle a la Supersalud un
+problema de entrega es tocar una puerta que no tiene competencia — la Corte lo dijo en
+T-243 de 2016 y T-163 de 2018. Por eso el triage no lo improvisa el modelo: es una tabla
+de decisión en Python, y el generador **se niega** a producir un escrito que no
+corresponda.
+
+Este intercambio es real, copiado de una corrida del agente:
+
+> **Tú:** llevo tres semanas yendo a la farmacia y no me entregan el losartán. quiero
+> poner una tutela ya
+> **Curuba:** Si no recibes el losartán ya, ¿corre riesgo tu vida o tu salud de forma grave?
+> **Tú:** no, es para la tensión
+> **Curuba:** ¿El problema es que no te lo entregan, que la EPS dice que no lo cubre, o
+> que ya lo pagaste de tu bolsillo?
+> **Tú:** no me lo entregan. no he radicado nada, no sabía que tocaba
 > …
-> **Curuba:** Listo, aquí está tu tutela 📎 Revísala antes de radicarla — sobre todo los
-> datos personales y las fechas. La radicas en cualquier juzgado, sin abogado y sin costo.
+> **Curuba:** Con lo que me contaste, lo que corresponde ahora es un derecho de petición
+> ante tu EPS, no la tutela: como todavía no le has pedido nada por escrito, este es el
+> paso que toca primero, es gratis y deja constancia con fecha que te sirve si después
+> necesitas tutelar. Vamos armándolo: ¿cuál es tu nombre completo?
+> …
+> **Curuba:** Aquí está tu derecho de petición listo 📎 No quedó ningún espacio en blanco,
+> así que puedes radicarlo tal cual y pide el número de radicado. La ley le da a la EPS 15
+> días hábiles para responderte; si no contesta, ya con esa constancia sí procede la tutela.
+
+**Pidió una tutela y Curuba le dio otra cosa, y esa es la función.** No por terco: sin un
+radicado previo la tutela llega sin la prueba que la sostiene.
 
 **La ley juega a favor.** La tutela es gratuita, no requiere abogado y no exige
 formalidades especiales (art. 86 de la Constitución). El Decreto 2591 de 1991, art. 29,
@@ -159,17 +186,25 @@ abierto.
                      ▼
               Pydantic AI Agent  ◄──►  Claude (OpenRouter)
                      │
-        ┌────────────┼─────────────┐
-        ▼            ▼             ▼
-    SISMED       INVIMA        fpdf2
-   (Postgres)  (Postgres)    → PDF tutela
-                                  │
-                                  ▼
+        ┌────────┬───┴────┬──────────────┐
+        ▼        ▼        ▼              ▼
+      PBS     SISMED   INVIMA      decidir_ruta()
+   (Postgres)                       tabla en Python
+                                          │  qué escrito procede
+                                          ▼
+                                    fpdf2 → PDF
+                                          │
+                                          ▼
                             GET /f/{id} ──► Twilio adjunta el PDF
 ```
 
-Un solo agente con cuatro tools; el modelo decide cuál usar. No hay ruteo por palabras
+Un solo agente con cinco tools; el modelo decide cuál usar. No hay ruteo por palabras
 clave, así que las tres funciones conviven en la misma conversación.
+
+**Lo único que el modelo no decide es cuál escrito procede.** Eso sale de una tabla de
+decisión en Python, por la misma razón por la que el significado de cada estado de
+cobertura también está en Python: en salud y en derecho, un dato equivocado es peor que no
+dar ninguno.
 
 ## Correr localmente
 

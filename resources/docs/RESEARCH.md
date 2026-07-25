@@ -82,14 +82,19 @@ distintas: van separadas, nunca sumadas ni promediadas.
 Ese último bloque es el punto ciego. La estadística agrupa las tres categorías, pero la
 jurisprudencia identifica con precisión las causales que tumban una tutela **antes de que
 el juez examine si el paciente tenía razón**. Cada causal es una pregunta que se puede
-hacer en un chat — la última columna son los campos que llena la entrevista de `tutela.py`:
+hacer en un chat — la última columna son los campos de `legal.CAMPOS`:
 
 | Causal | Jurisprudencia | Qué se pregunta en la entrevista |
 |---|---|---|
-| **Subsidiariedad** — no haber acudido a la función jurisdiccional de la Supersalud. La Corte corrigió que **no es un requisito ineludible**, y que la Supersalud no tiene competencia cuando hay omisión o silencio de la EPS | SU-508/2020 · T-343/2025 | `otro_medio_defensa`, `solicitud_previa` |
-| **Rechazo por defectos en la solicitud** (art. 17, Decreto 2591) — el juez no puede determinar los hechos. Es **excepcional**: primero debe pedir corrección en 3 días | T-313/2018 | `fecha_hechos`, `servicio_negado` |
-| **Legitimación por activa** — quién presenta la tutela y bajo qué figura: titular, representante, apoderado o agente oficioso | T-343/2025 | `accionante_*` |
-| **Carencia actual de objeto** — la EPS entrega entre la radicación y el fallo (*hecho superado*). No es una derrota: es el sistema cumpliendo solo porque hubo tutela | T-038/2019 · T-008/2025 | `fecha_hechos`, `tutela_previa` |
+| **Subsidiariedad** — no haber acudido a la función jurisdiccional de la Supersalud. La Corte corrigió que **no es un requisito ineludible**, y que la Supersalud no tiene competencia cuando hay omisión o silencio de la EPS | SU-508/2020 · T-343/2025 | `peticion_radicada`, `peticion_fecha`, `tipo_problema` |
+| **Rechazo por defectos en la solicitud** (art. 17, Decreto 2591) — el juez no puede determinar los hechos. Es **excepcional**: primero debe pedir corrección en 3 días | T-313/2018 | `fecha_reclamacion`, `medicamento`, `eps` |
+| **Legitimación por activa** — quién presenta la tutela y bajo qué figura: titular, representante, apoderado o agente oficioso | T-343/2025 | `nombre`, `cedula` |
+| **Carencia actual de objeto** — la EPS entrega entre la radicación y el fallo (*hecho superado*). No es una derrota: es el sistema cumpliendo solo porque hubo tutela | T-038/2019 · T-008/2025 | `fecha_reclamacion`, `tutela_previa` |
+
+**La subsidiariedad tiene una vuelta que cambia el producto.** Para *entrega* de
+medicamentos la Supersalud no es competente —T-243 de 2016 y T-163 de 2018—, así que la
+tutela es el mecanismo idóneo y no hay que agotarla. Eso es lo que codifica
+`legal.decidir_ruta()`: un problema de entrega **nunca** se rutea a la Supersalud.
 
 Las seis sentencias, con lo que aporta cada una, están en
 [Procedibilidad y causales de improcedencia](#procedibilidad-y-causales-de-improcedencia-jurisprudencia).

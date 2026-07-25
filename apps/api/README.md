@@ -4,21 +4,28 @@ El servicio que está detrás del número de WhatsApp. Recibe los mensajes que r
 Twilio, corre el agente y responde: cotiza fórmulas contra SISMED, consulta
 desabastecimientos del INVIMA y genera el PDF de una tutela.
 
-> **Estado: los datos y las tres tools que los leen ya funcionan; falta la tutela.**
-> Existen `config.py`, `db.py`, `agent.py`, `main.py`, `etl.py` y `schema.sql`. Las tres
-> fuentes están cargadas en Postgres (2.067 / 38.731 / 783 filas) y el agente contesta
-> con `consultar_cobertura`, `buscar_medicamento` y `consultar_desabastecimiento`. El
-> historial está en Postgres, no en RAM.
-> **Todavía no existen** `tutela.py`, `DejaVuSans.ttf`, `guardar_dato_tutela`,
-> `generar_tutela`, `GET /f/{id}` ni la lectura de fotos. Tampoco está declarado `fpdf2`
-> en `pyproject.toml`, ni `PUBLIC_BASE_URL` en `config.py`: los dos hacen falta para ese
-> slice.
+> **Estado: los datos y la ruta legal funcionan de punta a punta; falta leer fotos.**
+> Existen `config.py`, `db.py`, `agent.py`, `main.py`, `etl.py`, `schema.sql` y los
+> paquetes `tools/` y `legal/`.
+> Las tres fuentes están cargadas en Postgres (2.067 / 38.731 / 783 filas)
+> y el agente contesta con las cinco tools. La entrevista legal guarda en `casos`,
+> `decidir_ruta()` escoge mecanismo, los cuatro PDF se generan y `GET /f/{id}` los sirve
+> para que Twilio los adjunte.
+> **Todavía falta** la lectura de fotos de fórmulas (`BinaryContent` en el webhook), que
+> es lo único que queda del alcance original.
 
 **Lo importante de la arquitectura: es un solo agente con cinco tools, no tres
 endpoints.** WhatsApp es una sola conversación, así que no hay ruteo por palabras clave
 ni menús — el modelo decide qué tool usar. Eso es lo que permite que "mándame una foto de
-tu fórmula", "¿el losartán está desabastecido?" y "quiero hacer una tutela" convivan en el
-mismo hilo sin código de despacho.
+tu fórmula", "¿el losartán está desabastecido?" y "no me entregan el losartán" convivan en
+el mismo hilo sin código de despacho.
+
+**Y lo segundo: qué escrito procede lo decide Python, no el modelo.** La ruta legal tiene
+cuatro escalones y escoger mal el escalón es el modo de falla real — llevarle a la
+Supersalud un problema de entrega es tocar una puerta que no tiene competencia. Por eso
+`decidir_ruta()` vive en `legal/ruteo.py`, igual que `COBERTURAS` y `ESTADOS` viven en
+`tools/medicamentos.py`: lo que tiene consecuencia legal o clínica se traduce en Python y
+no se deja a interpretación del modelo.
 
 ## Stack
 
@@ -47,22 +54,49 @@ apps/api/
     ├── config.py
     ├── db.py
     ├── agent.py
-    ├── tutela.py
     ├── etl.py
     ├── schema.sql
-    └── DejaVuSans.ttf
+    ├── tools/                 las tools, un módulo por grupo
+    │   ├── __init__.py        TOOLSETS
+    │   ├── deps.py            Deps
+    │   ├── medicamentos.py    PBS, SISMED, INVIMA
+    │   └── ruta_legal.py      entrevista y generación
+    └── legal/                 la lógica legal, sin saber del agente
+        ├── __init__.py        API pública + generar()
+        ├── texto.py           normalizar()
+        ├── documentos.py      los cuatro escritos, canales, aviso
+        ├── fechas.py          leer_fecha, habiles_desde
+        ├── campos.py          CAMPOS, validar, qué falta
+        ├── ruteo.py           decidir_ruta  ← el corazón
+        ├── pdf.py             maquetación
+        ├── DejaVuSans*.ttf    fuente Unicode (ver trampa #2)
+        └── plantillas/        un archivo por escrito
+            ├── comun.py       lo que comparten los cuatro
+            ├── peticion.py
+            ├── tutela.py
+            ├── desacato.py
+            └── supersalud.py
 ```
 
-| Archivo | Qué va adentro |
+| Dónde | Qué va adentro |
 |---|---|
 | `main.py` | App de FastAPI: webhook de Twilio, `GET /f/{id}`, `/health` |
 | `config.py` | Settings desde el entorno con `pydantic-settings` |
 | `db.py` | Pool de asyncpg y **todo** el SQL del proyecto |
-| `agent.py` | El `Agent` de Pydantic AI: prompt del sistema y las cuatro tools |
-| `tutela.py` | Campos de procedibilidad y render del PDF |
+| `agent.py` | El `Agent`: prompt del sistema y el ciclo de conversación. **Ya no tiene tools** |
+| `tools/` | Un `FunctionToolset` por grupo. Agregar un grupo es un archivo y un renglón en `TOOLSETS` — no se toca `agent.py` |
+| `legal/` | Campos, ruteo, plantillas y PDF. **No importa nada del agente**: se puede usar y probar solo |
 | `etl.py` | Carga `resources/data/` a Postgres — se corre en local, no en Railway |
 | `schema.sql` | Tablas, extensiones e índices |
-| `DejaVuSans.ttf` | Fuente Unicode para el PDF (ver trampa #2) |
+
+**El paquete `legal/` se lee de abajo hacia arriba** y cada módulo depende solo de los
+anteriores: `texto` → `documentos` → `fechas` → `campos` → `ruteo` → `plantillas` → `pdf`.
+Esa cadena es lo que permite probar el ruteo sin base de datos y sin modelo.
+
+**Las tools van en toolsets, no en `@agente.tool`.** Si las tools importaran `agente` y
+`agent.py` importara las tools, el ciclo sería inevitable; con `FunctionToolset` las tools
+no saben que existe un agente y `agent.py` importa una sola lista. `Deps` vive en
+`tools/deps.py` por la misma razón.
 
 ## Las cinco tools
 
@@ -71,8 +105,11 @@ apps/api/
 | `consultar_cobertura(nombre)` | Busca en el PBS si lo financia la UPC. Devuelve la cobertura (`upc`, `condicionada`, `mipres`, `excluido`), qué significa y la aclaración textual |
 | `buscar_medicamento(nombre)` | Busca en SISMED por similitud y devuelve hasta 8 candidatos con presentación, laboratorio, precio institucional y **score** |
 | `consultar_desabastecimiento(nombre)` | Busca en el seguimiento del INVIMA; devuelve estado (`monitorizacion`, `riesgo`, `desabastecido`, `no_desabastecido`) y fecha, o dice explícitamente que no hay reportes |
-| `guardar_dato_tutela(campo, valor)` | Guarda una respuesta de la entrevista y devuelve qué campos faltan |
-| `generar_tutela()` | Valida que no falte nada, arma el PDF, lo guarda y devuelve su URL pública |
+| `guardar_dato_caso(campo, valor)` | Guarda una respuesta de la entrevista **y hace el triage**: devuelve la ruta que procede, el porqué y las preguntas que faltan, ya redactadas |
+| `generar_documento(tipo)` | Arma el PDF del escrito, lo guarda y devuelve su URL pública. Se **niega** si ese escrito no corresponde a la ruta |
+
+Las dos últimas son `@agente.tool` (necesitan `RunContext` para saber de qué número es la
+conversación); las tres de datos son `tool_plain`.
 
 **`consultar_cobertura` va primero y el prompt lo dice.** Si el medicamento está
 financiado con la UPC, el precio es casi irrelevante: la ruta es el dispensador de la EPS
@@ -90,20 +127,67 @@ donde el listado no es exhaustivo. Y el significado de cada estado se traduce en
 mejor los casos raros (dos presentaciones del mismo principio activo, un medicamento que
 no aparece).
 
-**La entrevista de la tutela tampoco es una máquina de estados.** El agente pregunta de a
-una, guarda cada respuesta con `guardar_dato_tutela`, y esa tool le devuelve los campos
-que faltan. Así maneja gratis las respuestas desordenadas, las correcciones y los
-mensajes donde la persona contesta tres cosas de una.
+**La entrevista tampoco es una máquina de estados.** El agente pregunta de a una, guarda
+cada respuesta con `guardar_dato_caso`, y esa tool le devuelve la ruta y los campos que
+faltan. Así maneja gratis las respuestas desordenadas, las correcciones y los mensajes
+donde la persona contesta tres cosas de una — verificado: contestar en desorden mete cada
+dato en el campo correcto y el agente sigue repreguntando solo lo que falta.
 
-### Campos de la tutela
+## La ruta legal
 
-`accionante_nombre` · `accionante_cedula` · `accionante_ciudad` · `accionante_direccion`
-· `accionante_telefono` · `accionado` · `servicio_negado` · `solicitud_previa` ·
-`perjuicio` · `otro_medio_defensa` · `fecha_hechos` · `tutela_previa`
+Cuatro escritos, no uno. La tutela es el último escalón.
 
-El PDF debe cubrir lo que un juez va a mirar: hechos, derechos vulnerados (arts. 11, 1 y
-49 C.P. y Ley 1751 de 2015), **procedibilidad** (subsidiariedad, inmediatez, legitimación
-por pasiva, no temeridad), pretensiones, juramento, pruebas, notificaciones y firma.
+| Ruta | Cuándo | Fundamento |
+|---|---|---|
+| `peticion` | Problema de entrega, sin riesgo y sin haber pedido nada por escrito | Art. 23 CP · Ley 1755/2015 |
+| `tutela` | Riesgo vital (directo, con medida provisional), o petición radicada y vencida | Art. 86 CP · Decreto 2591/1991 |
+| `desacato` | Ya hubo fallo de tutela y la EPS no cumple | Decreto 2591/1991 art. 52 |
+| `supersalud` | El problema es de **cobertura o reembolso**, no de entrega | Ley 1122/2007 art. 41 |
+| `esperar` | Petición radicada y la EPS todavía en plazo → se ofrece PQRD | — |
+| `indefinida` | Falta cerrar el triage | — |
+
+**El orden de las reglas en `decidir_ruta()` es el contenido**, no un detalle. Riesgo vital
+se evalúa de segundo y nunca puede terminar mandando a alguien a esperar 15 días hábiles.
+Y un problema de entrega **nunca** puede rutear a `supersalud`: T-243 de 2016 y T-163 de
+2018 excluyeron el suministro y la entrega de medicamentos de su función jurisdiccional.
+Las dos cosas están cubiertas por la tabla de verdad de la verificación.
+
+Dos detalles que cuestan un bug si se ignoran:
+
+- **Un `si_no` ambiguo no decide.** "más o menos" a "¿corre riesgo tu vida?" deja la ruta
+  en `indefinida` y repregunta, en vez de contarse como un no y mandar a esperar.
+- **Las fechas llegan en letras.** Nadie escribe `2026-07-02` por WhatsApp, escriben "el 2
+  de julio". `leer_fecha` entiende las dos, y de eso depende que `decidir_ruta` sepa si la
+  EPS ya está en mora.
+
+### Campos
+
+28 en total, en `legal.CAMPOS`, con la pregunta ya redactada para el paciente. Cada uno
+declara en qué documentos es **obligatorio** y en cuáles solo **útil**:
+
+- **Identidad** — `nombre` · `cedula` · `ciudad` · `direccion` · `telefono` · `correo`
+- **El caso** — `eps` · `gestor_farmaceutico` · `medicamento` · `enfermedad` ·
+  `fecha_prescripcion` · `fecha_reclamacion`
+- **Triage** — `riesgo_vital` · `tipo_problema` · `peticion_radicada` (+`peticion_radicado`,
+  `peticion_fecha`) · `tutela_previa`
+- **Pretensiones opcionales** — `otro_municipio` · `copagos` · `sujeto_especial`
+- **Solo desacato** — `tutela_numero` · `tutela_juzgado` · `tutela_fecha_fallo` ·
+  `tutela_incumplimiento`
+- **Solo Supersalud** — `negativa_fecha` · `negativa_medio` · `monto_reembolso`
+
+**Con los obligatorios ya genera.** Lo que falte sale como `[COMPLETAR: …]` visible en el
+PDF y la tool devuelve la lista en `marcadores` para que el agente los lea en voz alta. Es
+coherente con que el documento sea un borrador que debe revisarse antes de radicarse.
+
+Los PDF cubren lo que un juez va a mirar: hechos, derechos vulnerados (arts. 11, 1 y 49
+C.P. y Ley 1751 de 2015), **procedibilidad** (subsidiariedad, inmediatez, legitimación por
+activa y por pasiva, no temeridad), pretensiones, juramento, pruebas, notificaciones y
+firma. La tutela vincula también al **gestor farmacéutico**: es quien dispensa y sin él la
+orden se queda sin destinatario operativo.
+
+**El PQRD ante la Supersalud no es un escrito y por eso no se genera** — es una línea
+telefónica y un formulario web. Está en `legal.SUPERSALUD_CANALES`, con su fecha de
+verificación, y el agente lo dicta cuando la ruta es `esperar`.
 
 ## Modelo de datos
 
@@ -115,8 +199,15 @@ Requiere las extensiones `pg_trgm`, `unaccent` y `pgcrypto`.
 | `medications` | SISMED. PK `cum` |
 | `shortages` | INVIMA. Nombre, ATC, estado |
 | `conversations` | PK `wa_id`, historial de Pydantic AI serializado en `jsonb` |
-| `tutela_drafts` | PK `wa_id`, respuestas de procedibilidad en `jsonb` |
-| `documents` | PDFs generados en `bytea`, servidos por `GET /f/{id}` |
+| `casos` | PK `wa_id`, toda la entrevista legal en un `jsonb` |
+| `documents` | PDFs generados en `bytea` con su `tipo`, servidos por `GET /f/{id}` |
+
+`casos` no se parte por tipo de documento: la mitad de los campos los comparten los cuatro
+escritos, y quién decide cuál procede es `decidir_ruta()` sobre esos mismos datos, no una
+elección previa del usuario. El merge de cada campo se hace **en Postgres** con
+`campos || jsonb_build_object(...)`, no leyendo y reescribiendo desde Python: dos mensajes
+del mismo número pueden entrar a la vez —cada uno en su propio `BackgroundTasks`— y un
+round-trip perdería uno de los dos campos en silencio.
 
 `coverage`, `medications` y `shortages` llevan una columna generada `search_text` con el
 texto normalizado, e índice GIN `gin_trgm_ops` encima.
@@ -291,15 +382,20 @@ respuesta real aparte, por la API REST de Twilio, desde un `BackgroundTasks`. Si
 hace mal, Twilio reintenta en silencio y al usuario le llegan mensajes duplicados —
 además se rompe justo en la demo, que es cuando las respuestas son más largas.
 
-**2. El PDF necesita una fuente Unicode registrada a mano.**
+**2. El PDF necesita una fuente Unicode registrada a mano — pero `uni=True` ya no existe.**
 
 ```python
-pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
+pdf.add_font("DejaVu", "", "DejaVuSans.ttf")   # sin uni=True
 ```
 
-Sin eso las tildes y la ñ salen dañadas. Y aparte: `strftime("%B")` sigue el locale del
-sistema, y en el contenedor sale en inglés — genera *"24 de July de 2026"* en el
-encabezado. Hay que tener los meses en español en una constante, no depender del locale.
+El `uni=True` que traía la receta vieja **desapareció en fpdf2 2.8** y pasarlo revienta
+con `TypeError: add_font() got an unexpected keyword argument 'uni'`. El soporte Unicode
+viene de la fuente, no de la bandera. Lo que sí sigue siendo cierto es que sin registrar
+el `.ttf` las tildes y la ñ salen dañadas.
+
+Y aparte: `strftime("%B")` sigue el locale del sistema, y en el contenedor sale en inglés
+— genera *"24 de July de 2026"*. Los meses en español van en `legal.MESES`, no en el
+locale.
 
 **3. El match de medicamentos nunca es exacto, y `similarity()` no sirve para esto.** Una
 fórmula escrita a mano dice "losartan 50" y SISMED dice `ARAMAX - Amlodipino 2,5mg/1U +
