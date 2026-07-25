@@ -221,11 +221,34 @@ ORDER BY score DESC,
 LIMIT $2
 """
 
+# ── `coverage` y `shortages` van en las DOS direcciones ───────────────────
+#
+# `a <% b` mide si `a` cabe dentro de un pedazo de `b`, así que solo sirve cuando la
+# CONSULTA es corta y el TEXTO es largo. En `medications` eso se cumple (search_text
+# promedia 103 caracteres) y por eso la de arriba se queda como está.
+#
+# En `coverage` es al revés: search_text es SOLO el principio activo, o sea corto. Y
+# desde que se leen fórmulas por foto, la consulta llega larga — el renglón entero de la
+# fórmula. Ahí el operador falla en silencio y devuelve cero filas:
+#
+#     word_similarity('adalimumab 40 mg/0.8 ml solucion inyectable', 'adalimumab')  -> 0
+#     word_similarity('adalimumab', 'adalimumab 40 mg/0.8 ml solucion inyectable')  -> 1.00
+#
+# Y cero filas en cobertura NO es un resultado neutro: el agente lo reporta como "no lo
+# encontré en el listado", cuando el ADALIMUMAB sí está y está financiado con la UPC.
+# Es el falso negativo que le cuesta $200.000 a alguien, disparado por el simple hecho
+# de mandar una foto en vez de escribir el nombre.
+#
+# Con `%>` (el conmutador de `<%`) se cubren las dos direcciones y el score es el mayor
+# de las dos. El `OR` hace que Postgres deje de usar el índice GIN y caiga a seq scan,
+# pero son 2.067 y 783 filas: no se nota. En `medications`, con 38.731, sí se notaría
+# —medido: 300ms a 1s— y además no hace falta.
 _CONSULTAR_DESABASTECIMIENTO = """
 SELECT nombre, atc, estado, fecha_seguimiento, listado,
-       round(word_similarity(curuba_norm($1), search_text)::numeric, 2) AS score
+       round(greatest(word_similarity(curuba_norm($1), search_text),
+                      word_similarity(search_text, curuba_norm($1)))::numeric, 2) AS score
 FROM shortages
-WHERE curuba_norm($1) <% search_text
+WHERE curuba_norm($1) <% search_text OR curuba_norm($1) %> search_text
 ORDER BY score DESC,
          similarity(curuba_norm(nombre), curuba_norm($1)) DESC
 LIMIT $2
@@ -235,11 +258,13 @@ _BUSCAR_COBERTURA = """
 SELECT * FROM (
     SELECT DISTINCT ON (principio_activo, cobertura)
            principio_activo, atc, forma, cobertura, aclaracion,
-           round(word_similarity(curuba_norm($1), search_text)::numeric, 2) AS score
+           round(greatest(word_similarity(curuba_norm($1), search_text),
+                          word_similarity(search_text, curuba_norm($1)))::numeric, 2) AS score
     FROM coverage
-    WHERE curuba_norm($1) <% search_text
+    WHERE curuba_norm($1) <% search_text OR curuba_norm($1) %> search_text
     ORDER BY principio_activo, cobertura,
-             word_similarity(curuba_norm($1), search_text) DESC
+             greatest(word_similarity(curuba_norm($1), search_text),
+                      word_similarity(search_text, curuba_norm($1))) DESC
 ) c
 ORDER BY score DESC,
          similarity(curuba_norm(principio_activo), curuba_norm($1)) DESC
