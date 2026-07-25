@@ -21,8 +21,16 @@ log = logging.getLogger("curuba")
 
 @asynccontextmanager
 async def _ciclo(_: FastAPI) -> AsyncIterator[None]:
-    await db.abrir()
-    await db.aplicar_esquema()  # idempotente: el deploy se auto-migra
+    try:
+        await db.abrir()
+        await db.aplicar_esquema()  # idempotente: el deploy se auto-migra
+    except Exception:
+        # El arranque TIENE que morir acá — es lo que hace que el healthcheck
+        # grite en vez de descubrirlo en la primera query. Pero el traceback de
+        # asyncpg no nombra ni una variable de entorno, así que dejamos una
+        # línea legible antes de que se vaya.
+        log.exception("no se pudo abrir Postgres — revisar DATABASE_URL y las extensiones")
+        raise
     log.info("pool de Postgres abierto y esquema aplicado")
     yield
     await db.cerrar()

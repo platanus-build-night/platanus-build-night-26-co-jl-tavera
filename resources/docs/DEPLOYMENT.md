@@ -106,6 +106,68 @@ Por último: *Settings → Networking → **Generate Domain***.
 > (por ejemplo el ETL) hace falta `DATABASE_PUBLIC_URL`, que está en las variables del
 > servicio de Postgres. La `DATABASE_URL` privada solo resuelve dentro de Railway.
 
+### Cuando el arranque falla en `db.abrir()`
+
+El síntoma: el contenedor arranca, muere en el `lifespan` y vuelve a arrancar, en bucle.
+
+```
+File "/app/src/curuba/main.py", line 24, in _ciclo
+    await db.abrir()
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 5432, 0, 0),
+                              [Errno 111] Connect call failed ('127.0.0.1', 5432)
+ERROR:    Application startup failed. Exiting.
+```
+
+> ⚠️ **`127.0.0.1` no significa que Postgres esté caído: significa que `DATABASE_URL`
+> llegó vacía.** Ese es *localhost dentro del contenedor de la API*, donde nunca hubo una
+> base. asyncpg con un DSN vacío no se queja: lo ignora, cae a los defaults de libpq y
+> termina marcando a `localhost:5432`. Si la variable tuviera la URL privada, el host del
+> error sería `postgres.railway.internal`; si tuviera basura, el error sería de parseo
+> del DSN, no de conexión.
+
+Las cuatro formas de que falte, en orden de qué tan fácil es no verlas:
+
+| Qué pasó | Cómo se detecta |
+|---|---|
+| **No existe el servicio de Postgres** | `railway service list` devuelve un solo servicio. Fue lo que pasó la primera vez |
+| Nunca se agregó a la API (se agregó solo al Postgres, o a nada) | `DATABASE_URL` no aparece en `variable list` |
+| La referencia trae el nombre equivocado del servicio | Aparece vacía — Railway **no marca error** por una referencia que no resuelve |
+| Se agregó en otro *environment* | Aparece en `staging` pero no en `production` |
+
+> ⚠️ **La primera fila fue la de verdad y no se parece a un problema de base de datos.**
+> El proyecto tenía la API desplegándose, con su Root Directory, su `railway.json` y todas
+> las variables de OpenRouter y Twilio bien puestas — y **cero bases de datos**. El paso
+> *+ New → Database → PostgreSQL* de esta misma sección se saltó, y como el error que sale
+> es de conexión rechazada, se lee como «Postgres está caído» en vez de «Postgres no
+> existe». Primer comando ante este traceback: `railway service list`.
+
+Detrás de las otras tres hay un solo hecho: **Railway no comparte variables entre
+servicios.** Que el Postgres esté en el mismo proyecto no le pone `DATABASE_URL` a la API;
+hay que declararla en las variables **del servicio de la API**, como sale arriba. Y la
+referencia lleva el **nombre exacto** del servicio: si quedó como `postgres` en minúscula o
+`Postgres-abc123`, se resuelve a nada y el deploy falla igual que si nunca se hubiera
+puesto.
+
+Para diagnosticar y arreglar desde el CLI:
+
+```bash
+railway service list --json                       # el nombre EXACTO del Postgres
+railway variable list --service <api> --json      # ¿está? ¿resuelta o vacía?
+railway variable set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' --service <api>
+```
+
+Las comillas simples no son opcionales: sin ellas el shell se come las llaves.
+
+> **Un error repetido en los logs es un solo fallo.** `railway.json` trae
+> `restartPolicyType: ON_FAILURE`, así que el mismo traceback sale una vez por reinicio.
+> Ver tres copias no quiere decir que hayan pasado tres cosas distintas.
+
+Desde el commit que agregó la guarda, `db.abrir()` revienta antes de llegar a asyncpg con
+un mensaje que dice cuál variable falta, precedido en los logs por
+`no se pudo abrir Postgres — revisar DATABASE_URL y las extensiones`. Si en vez de eso
+sale el traceback de `CREATE EXTENSION`, el problema es otro: son `pg_trgm`/`unaccent`, y
+eso está descrito arriba en *Postgres*.
+
 ---
 
 ## 3. Twilio

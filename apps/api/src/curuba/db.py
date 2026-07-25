@@ -18,6 +18,18 @@ async def abrir() -> None:
     """Abre el pool. Se llama desde el lifespan de FastAPI."""
     global _pool
     if _pool is None:
+        if not settings.database_url:
+            # asyncpg con un DSN vacío no falla de una: lo ignora, cae a los
+            # defaults de libpq y termina intentando localhost:5432. El error
+            # que sale ("Connect call failed ('127.0.0.1', 5432)") no menciona
+            # ninguna variable de entorno y parece un Postgres caído.
+            raise RuntimeError(
+                "Falta DATABASE_URL. En Railway va en las variables del SERVICIO "
+                "DE LA API como ${{Postgres.DATABASE_URL}} — no basta con que "
+                "exista el servicio de Postgres, Railway no comparte variables "
+                "entre servicios. En local va la URL PÚBLICA "
+                "(DATABASE_PUBLIC_URL): la privada solo resuelve dentro de Railway."
+            )
         _pool = await asyncpg.create_pool(settings.database_url, min_size=1, max_size=5)
 
 
