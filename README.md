@@ -12,6 +12,13 @@ against the regulated SISMED ceilings, INVIMA shortage status, and generated leg
 
 Platanus Build Night — Bogotá @ Buk · Hacker: Jose Luis Tavera ([@jl-tavera](https://github.com/jl-tavera))
 
+**Pruébalo:** [escríbele por WhatsApp](https://wa.me/12603057633?text=Hola%20Curuba) — el
+enlace trae el texto listo, y que el primer mensaje salga de ti es lo que abre la ventana
+de 24 h de Meta. La landing está en
+[curuba-web-production.up.railway.app](https://curuba-web-production.up.railway.app) y
+[`/demo`](https://curuba-web-production.up.railway.app/demo) proyecta la corrida del agente
+en vivo mientras alguien le escribe.
+
 ---
 
 ## El problema
@@ -61,33 +68,51 @@ rural, las causales que tumban una tutela— están en
 
 ## Las tres funciones
 
-### 1. Fórmula → precio regulado
+### 1. Fórmula → ¿te toca pagarlo? y ¿cuánto?
 
-Le mandas una foto de la fórmula (o la escribes). Curuba extrae los medicamentos, los
-busca en SISMED y te devuelve cada uno con su techo de precio y la circular que lo fija.
+Le mandas una foto de la fórmula (o la escribes). Curuba extrae los medicamentos y, uno
+por uno, mira **primero si el PBS lo financia con la UPC** — porque si lo financia el
+paciente no tiene que comprarlo. Solo si le toca comprarlo entra el precio.
 
 > **Tú:** _[foto de una fórmula]_
-> **Curuba:** Encontré 3 medicamentos en tu fórmula. Estos son los **techos de precio
-> regulados del canal institucional** (Circular CNPMDM), no lo que te va a cobrar la
-> droguería:
-> • Acetaminofén 500 mg — sólido oral x 100 → $12.400 la presentación
-> • Losartán 50 mg — sólido oral x 30 → $8.900 la presentación
+> **Curuba:** Leí 3 medicamentos. El losartán y el acetaminofén están **financiados con la
+> UPC**: los reclamas en el dispensador de tu EPS pagando solo la cuota moderadora, no los
+> compras. El omeprazol no aparece en el listado — confírmalo con tu EPS antes de pagarlo.
+> Si te toca comprarlo, el techo regulado del canal institucional es:
 > • Omeprazol 20 mg — sólido oral x 14 → $6.100 la presentación
-> Sirven de referencia para saber si lo que te están pidiendo está fuera de rango.
 
-*Las cifras del ejemplo son ilustrativas: los valores reales los arma el ETL sobre el
-corte de SISMED, y el techo es por presentación, no por unidad.*
+*Las cifras del ejemplo son ilustrativas: la cobertura sale del PBS y el techo del corte de
+SISMED, por presentación y no por unidad.*
+
+**Ese orden es el producto.** Enrutar bien ahorra ~100 %; comparar precios ahorra 20–40 %.
+Dar el precio de frente manda a alguien a gastarse $800.000 en un adalimumab que la EPS
+tenía que ponerle, así que el orden no es una sugerencia del prompt: `precio_en_drogueria`
+levanta `ModelRetry` si todavía no se consultó la cobertura.
 
 Los nombres nunca coinciden exactamente —una fórmula a mano dice "acetaminofen 500" y
 SISMED dice `ACETAMINOFÉN - Sólido - Oral`— así que la búsqueda es por similitud de
 trigramas y, cuando hay duda, Curuba pregunta en vez de adivinar. Un precio equivocado en
 una app de salud es peor que no dar precio.
 
+**Y el paciente habla de marcas, no de principios activos.** Las tres bases están indexadas
+por principio activo, así que "Dolex" o "Noxpirin" mueren en *no lo encontré*. Cuando el
+nombre suena a marca, Curuba sale a buscarlo en la web, resuelve el principio activo y
+**vuelve a consultar las tres bases él mismo** con el nombre bueno. Si la búsqueda no trae
+fuentes, o el medicamento resulta ser de otro país, se reporta como no encontrado: las
+marcas se repiten entre países con composiciones distintas.
+
 **Qué precio es exactamente.** El techo de venta **final al público** viene con valor en 4
 filas de 38.731; el del canal **institucional**, en las 38.731. Así que Curuba no dice
 "esto es lo que deberías pagar en la droguería" —dice cuál es el techo regulado que sí
 está respaldado. Es menos vendedor y es lo único honesto; el porqué está en
 [`resources/data/README.md`](resources/data/README.md).
+
+**El precio del mostrador, cuando lo preguntan, sale del catálogo y no de un buscador.**
+Curuba le pega directo a los catálogos de Drogas La Rebaja y Farmatodo —~700 ms, y
+contestan lo mismo dos veces seguidas—; solo si los dos vienen vacíos cae a una búsqueda
+web. Y si no aparece precio en ninguna parte, dice dónde lo venden **sin cifra**: el techo
+regulado no se usa como sustituto, que es justo la confusión que este proyecto no puede
+sembrar.
 
 ### 2. Consulta de desabastecimiento
 
@@ -104,6 +129,12 @@ del INVIMA, no uno fijo por medicamento.*
 Esta es la función que decide qué hacer después: **el problema es del país o es de tu
 EPS.** Si el medicamento está desabastecido, el reclamo es por la alternativa terapéutica;
 si no lo está, el incumplimiento es de la EPS y ahí la tutela tiene otro peso.
+
+**Por eso el INVIMA no espera a que lo pregunten.** Viaja pegado a toda consulta de
+medicamento, en paralelo y sin costar tiempo: quien escribe "¿me lo cubre la EPS?" no sabe
+que el desabastecimiento se pregunta aparte, y es justo lo que le explica por qué no se lo
+entregan. Lo que sí decide Python es si eso es noticia — un seguimiento cerrado no se
+menciona, o Curuba estaría alarmando a alguien que solo preguntó un precio.
 
 La clasificación del INVIMA tiene seis estados; el corte cargado (mayo 2026) trae **783
 medicamentos** en cuatro de ellos —cerca de la mitad en monitorización y solo 11
@@ -192,21 +223,23 @@ abierto.
       │
       ▼
    Twilio ──────► FastAPI (Railway)
-                     │   webhook responde 200 de inmediato;
+                     │   el webhook responde 200 de inmediato;
                      │   la respuesta real se manda aparte
                      ▼
               Pydantic AI Agent  ◄──►  Claude (OpenRouter)
+              7 tools · 2 toolsets
                      │
-        ┌────────┬───┴────┬──────────────┐
-        ▼        ▼        ▼              ▼
-      PBS     SISMED   INVIMA      decidir_ruta()
-   (Postgres)                       tabla en Python
-                                          │  qué escrito procede
-                                          ▼
-                                    fpdf2 → PDF
-                                          │
-                                          ▼
-                            GET /f/{id} ──► Twilio adjunta el PDF
+        ┌────────────┴──────────────┐
+        │ toolset medicamentos      │ toolset ruta_legal
+        ▼                           ▼
+   Postgres · pg_trgm            decidir_ruta()
+   PBS 2.067 · SISMED 38.731     tabla en Python
+   INVIMA 783                       │  qué escrito procede
+        │                           ▼
+        │ marca comercial o    fpdf2 → PDF
+        ▼ precio de mostrador        │
+   La Rebaja · Farmatodo             ▼
+   Perplexity Sonar (respaldo)  GET /f/{id} ──► Twilio adjunta el PDF
 ```
 
 Un solo agente con siete tools; el modelo decide cuál usar. No hay ruteo por palabras
@@ -217,18 +250,50 @@ decisión en Python, por la misma razón por la que el significado de cada estad
 cobertura también está en Python: en salud y en derecho, un dato equivocado es peor que no
 dar ninguno.
 
+### La corrida, en vivo
+
+Un chat de WhatsApp proyectado en una pantalla no muestra nada de lo que pasa debajo. Por
+eso hay una segunda ruta en la web, [`/demo`](https://curuba-web-production.up.railway.app/demo):
+a la izquierda el mapa del agente prendiéndose tool por tool mientras corre, a la derecha
+un celular con la conversación real apareciendo en vivo, con la foto de la fórmula y el PDF
+que se genera.
+
+**Los datos no son una maqueta.** Salen del `event_stream_handler` de Pydantic AI sobre la
+misma corrida que atiende el webhook de Twilio: un evento por cada tool que se llama y por
+cada trozo de texto que escribe el modelo, servidos por SSE en `GET /demo/eventos`. Lo que
+sostiene que un panel pueda mirar el camino de producción es que el emisor no bloquea y no
+levanta nunca — un panel roto no puede callar una respuesta.
+
+**Solo se proyecta un número, el de `CURUBA_DEMO_WA`,** y el descarte va en el emisor y no
+en el cliente: la conversación de otro paciente no entra al bus, no sale por el SSE y no le
+queda la foto de su fórmula guardada.
+
 ## Correr localmente
 
 ```bash
 cd apps/api
 cp .env.example .env          # llenar DATABASE_URL, OPENROUTER_API_KEY y las de Twilio
 
-uv sync --extra etl
+uv sync                       # el ETL no necesita extras: lee los CSV con la stdlib
 uv run python -m curuba.etl   # crea el esquema y carga resources/data/ a Postgres
 uv run uvicorn curuba.main:app --app-dir src --reload
 ```
 
-Para probar el webhook de verdad hace falta una URL pública:
+**Para iterar el prompt no hace falta ni Twilio ni túnel**, hay un REPL del agente:
+
+```bash
+PYTHONPATH=src uv run python -m curuba.agent
+#   reiniciar            borra la conversación y el caso
+#   limpiar cache        vacía el caché de las búsquedas web
+#   foto <ruta> [texto]  manda una imagen, como una fórmula por WhatsApp
+```
+
+`reiniciar` también funciona escribiéndolo por WhatsApp, y se usa todo el tiempo probando
+la entrevista legal: sin eso la corrida siguiente arrastra los campos de la anterior.
+
+Y el webhook completo se puede probar sin exponer nada — un POST form-encoded a
+`/webhooks/twilio/whatsapp` con `From=whatsapp:%2B57...` corre el agente y la respuesta
+sale por la API REST al celular de verdad. Si se prefiere que Twilio lo llame:
 
 ```bash
 ngrok http 8000
@@ -236,16 +301,25 @@ ngrok http 8000
 # https://<tu-subdominio>.ngrok.io/webhooks/twilio/whatsapp
 ```
 
-Escribiendo `reiniciar` por WhatsApp se borra la conversación y el borrador del escrito.
+El panel de `/demo` es la landing corriendo aparte, apuntada a esa API:
+
+```bash
+cd apps/web && npm install && npm run dev   # NEXT_PUBLIC_API_URL, si no cae a :8000
+```
+
+Necesita `CURUBA_DEMO_WA` y `PUBLIC_BASE_URL` puestas en la API. **Lo mueve el webhook, no
+el REPL** —el REPL conversa como el número `local`, que no es el de la allowlist—, así que
+para verlo moverse sin Twilio se le manda el POST de arriba con el número de la demo.
 
 ## Documentación
 
 | | |
 |---|---|
-| [`apps/api/README.md`](apps/api/README.md) | la API: modelo de datos, tools, endpoints |
-| [`apps/web/README.md`](apps/web/README.md) | la landing y su sistema de diseño |
+| [`apps/api/README.md`](apps/api/README.md) | la API: modelo de datos, las siete tools, endpoints |
+| [`apps/web/README.md`](apps/web/README.md) | la landing, el panel de `/demo` y el copy de cada sección |
 | [`resources/data/README.md`](resources/data/README.md) | columnas, cortes y trampas de parseo de SISMED, INVIMA y PBS |
 | [`resources/docs/RESEARCH.md`](resources/docs/RESEARCH.md) | las cifras y de dónde sale cada una |
+| [`resources/docs/DESIGN.md`](resources/docs/DESIGN.md) | el sistema de diseño: paleta, tipografía y presupuesto técnico |
 | [`resources/docs/DEPLOYMENT.md`](resources/docs/DEPLOYMENT.md) | Railway, Twilio y el orden en que conviene probar |
 
 ---

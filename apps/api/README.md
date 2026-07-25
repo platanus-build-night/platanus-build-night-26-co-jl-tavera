@@ -5,13 +5,14 @@ Twilio, corre el agente y responde: cotiza fórmulas contra SISMED, consulta
 desabastecimientos del INVIMA y genera el PDF de una tutela.
 
 > **Estado: camina de punta a punta.** Existen `config.py`, `db.py`, `agent.py`,
-> `main.py`, `etl.py`, `schema.sql` y los paquetes `tools/` y `legal/`.
+> `main.py`, `etl.py`, `demo.py`, `schema.sql` y los paquetes `tools/` y `legal/`.
 > Las tres fuentes están cargadas en Postgres (2.067 / 38.731 / 783 filas) y el agente
 > contesta con las siete tools. La entrevista legal guarda en `casos`, `decidir_ruta()`
 > escoge mecanismo, los cuatro PDF se generan y `GET /f/{id}` los sirve para que Twilio
 > los adjunte. Las fotos de fórmulas se leen (`BinaryContent`), y cuando el paciente
 > dice una marca comercial en vez de un principio activo, `identificar_medicamento` la
-> traduce buscando en la web.
+> traduce buscando en la web. `demo.py` publica esa misma corrida por SSE en
+> `GET /demo/eventos`, que es de donde se alimenta el panel `/demo` de la web.
 
 **Lo importante de la arquitectura: es un solo agente con siete tools, no tres
 endpoints.** WhatsApp es una sola conversación, así que no hay ruteo por palabras clave
@@ -40,7 +41,7 @@ no se deja a interpretación del modelo.
 
 ## Estructura planeada
 
-Siete archivos. Es a propósito: antes de crear uno nuevo, extender el que ya existe.
+Ocho archivos. Es a propósito: antes de crear uno nuevo, extender el que ya existe.
 
 ```
 apps/api/
@@ -54,6 +55,7 @@ apps/api/
     ├── db.py
     ├── agent.py
     ├── etl.py
+    ├── demo.py                bus de eventos + SSE del panel de tarima
     ├── schema.sql
     ├── tools/                 las tools, un módulo por grupo
     │   ├── __init__.py        TOOLSETS

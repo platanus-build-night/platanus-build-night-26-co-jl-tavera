@@ -1,8 +1,10 @@
 # Curuba
 
 Agente de WhatsApp para pacientes en Colombia. Hace tres cosas: (1) lee una fórmula
-médica —texto o foto— extrae los medicamentos y los cotiza contra SISMED; (2) consulta
-si un medicamento está desabastecido según INVIMA, cuando el usuario lo pregunta;
+médica —texto o foto—, extrae los medicamentos y, para cada uno, mira **primero si el PBS
+lo financia con la UPC** y solo si le toca comprarlo cotiza el techo del SISMED y lo que
+publican los catálogos de las droguerías; (2) dice si el medicamento está desabastecido
+según INVIMA —eso ya viaja pegado a cada consulta, no espera a que lo pregunten—;
 (3) hace el triage de la **ruta legal** y genera el PDF del escrito que procede.
 
 La (3) son cuatro escritos, no uno: derecho de petición, tutela, incidente de desacato y
@@ -20,16 +22,19 @@ demostrar, no para generalidad.
 | API | FastAPI + Pydantic AI | Railway |
 | Modelo | Claude vía OpenRouter | — |
 | Datos | Postgres (`pg_trgm`, `unaccent`) | Railway |
+| Búsqueda | Perplexity Sonar por OpenRouter (**la misma llave**) y los catálogos de La Rebaja y Farmatodo por HTTP | — |
 | Canal | Twilio WhatsApp (número propio) | — |
 | PDF | `fpdf2` | — |
-| Landing | Next.js | Railway |
+| Web | Next.js: la landing y el panel de `/demo` | Railway |
+| Panel | SSE en `GET /demo/eventos` → un `EventSource` en `/demo` | — |
 
 ## Estado
 
 ```
 apps/api/     FastAPI + Pydantic AI, va a Railway. Camina de punta a punta: webhook,
-              agente con siete tools (en `tools/`), datos en Postgres, fotos de fórmulas
-              y la ruta legal con sus cuatro PDF (en `legal/`)
+              agente con siete tools (en `tools/`), datos en Postgres, fotos de fórmulas,
+              la ruta legal con sus cuatro PDF (en `legal/`) y el bus de eventos que
+              alimenta por SSE el panel de la web (`demo.py`)
 apps/web/     Next.js en Railway, servicio `curuba-web`. Dos rutas: la landing (`/`,
               estática, no depende de la API) y `/demo`, el panel de tarima que pinta la
               corrida del agente en vivo leyendo el SSE de la API
@@ -62,7 +67,7 @@ entorno y las trampas conocidas. Ese es el spec, no este archivo.
 - **Todo el SQL debe quedar en `db.py`.** Ninguna query suelta en `agent.py` ni en
   `main.py`.
 - **Un paquete por concern, archivos planos adentro.** La raíz de `curuba/` se mantiene
-  corta —`main`, `config`, `db`, `agent`, `etl`— y lo que crece se vuelve paquete:
+  corta —`main`, `config`, `db`, `agent`, `etl`, `demo`— y lo que crece se vuelve paquete:
   `tools/` (un módulo por grupo de tools) y `legal/` (texto, documentos, fechas, campos,
   ruteo, plantillas, pdf). Dentro de un paquete, un archivo por responsabilidad y sin
   anidar de más. No crear un módulo suelto en la raíz para algo que le cabe a un paquete.
@@ -72,7 +77,7 @@ entorno y las trampas conocidas. Ese es el spec, no este archivo.
 
 ```bash
 cd apps/api
-uv sync                                              # --extra etl añade pandas
+uv sync                                              # el extra `etl` (pandas) quedó sin uso
 uv run uvicorn curuba.main:app --app-dir src --reload
 uv pip compile pyproject.toml -o requirements.txt    # regenerar para Railway
 
@@ -81,8 +86,10 @@ PYTHONPATH=src uv run python -m curuba.db            # aplicar schema.sql a mano
 PYTHONPATH=src uv run python -m curuba.etl           # cargar resources/data/ a Postgres
 ```
 
-En el REPL, `reiniciar` borra la conversación **y el caso** — se usa todo el tiempo
-probando la entrevista legal, que si no arrastra los campos de la corrida anterior.
+El REPL tiene tres comandos propios: `reiniciar` borra la conversación **y el caso** —se
+usa todo el tiempo probando la entrevista legal, que si no arrastra los campos de la
+corrida anterior—, `limpiar cache` vacía el caché de las búsquedas web y
+`foto <ruta> [texto]` manda una imagen como si llegara por WhatsApp.
 
 El REPL solo necesita `OPENROUTER_API_KEY` y `DATABASE_URL`: sirve para iterar el prompt
 sin tocar Twilio. Para probar el webhook completo en local no hace falta túnel — se le
@@ -90,6 +97,17 @@ manda un POST form-encoded a `/webhooks/twilio/whatsapp` con `From=whatsapp:%2B5
 (el `+` va como `%2B`) y la respuesta sale por la API REST al celular de verdad. Eso sí,
 el número tiene que haberle escrito al sender en las últimas 24 h o Meta rechaza el
 mensaje con **error 63016**.
+
+El panel de tarima corre aparte y apunta a esa misma API:
+
+```bash
+cd apps/web && npm install && npm run dev   # / y /demo; NEXT_PUBLIC_API_URL, si no cae a :8000
+```
+
+**Al panel lo mueve el webhook, no el REPL.** El REPL conversa como el número `local` y la
+allowlist es `CURUBA_DEMO_WA`, así que para verlo moverse sin Twilio va el POST de arriba
+con el número de la demo. En la API hacen falta `CURUBA_DEMO_WA` y `PUBLIC_BASE_URL` — sin
+la segunda las fotos del panel no tienen URL.
 
 ## Despliegue
 
@@ -180,4 +198,8 @@ Cuatro trampas al agregar más:
 
 Curuba no da asesoría médica ni jurídica. La tutela que genera es un **borrador que
 debe revisarse antes de radicarse**. Ese aviso va en el pie del PDF, en la respuesta de
-WhatsApp y en la landing. No quitarlo.
+WhatsApp y en la landing (`/`). No quitarlo de esos tres.
+
+`/demo` es la excepción y es a propósito: es una pantalla de tarima que se proyecta, no un
+canal por el que un paciente reciba nada. El aviso sigue saliendo donde le llega a una
+persona de verdad.
