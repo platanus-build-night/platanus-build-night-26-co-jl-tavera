@@ -1,0 +1,137 @@
+"""Las dos tools de la ruta legal: la entrevista y la generación del escrito.
+
+La lógica no está acá — está en el paquete `curuba.legal`. Este módulo es la capa de
+traducción entre el agente y esa lógica: valida, llama, y convierte los resultados en
+algo que el modelo pueda usar sin reinterpretarlo.
+
+El bloqueo del triage se hace con `ModelRetry` a propósito: le devuelve el porqué al
+modelo para que lo explique en sus palabras, en vez de reventar la corrida.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic_ai import ModelRetry, RunContext
+from pydantic_ai.toolsets import FunctionToolset
+
+from curuba import db, legal
+from curuba.config import settings
+from curuba.tools.deps import Deps
+
+ruta_legal = FunctionToolset()
+
+
+def _preguntas(nombres: list[str]) -> list[dict[str, Any]]:
+    """Los campos que faltan, con la pregunta ya redactada para el paciente.
+
+    La pregunta va literal para que el modelo no la reinvente: están escritas para que
+    las entienda alguien que no sabe de leyes, y "¿corre riesgo tu vida?" no es lo mismo
+    que "¿configura un perjuicio irremediable?".
+    """
+    salida = []
+    for nombre in nombres:
+        campo = legal.CAMPOS[nombre]
+        entrada: dict[str, Any] = {"campo": nombre, "pregunta": campo.pregunta}
+        if campo.opciones:
+            entrada["valores_validos"] = list(campo.opciones)
+        elif campo.tipo == "si_no":
+            entrada["valores_validos"] = ["sí", "no"]
+        salida.append(entrada)
+    return salida
+
+
+@ruta_legal.tool
+async def guardar_dato_caso(
+    ctx: RunContext[Deps], campo: str, valor: str
+) -> dict[str, Any]:
+    """Guarda un dato de la entrevista legal y dice qué mecanismo procede.
+
+    Es también el triage: con cada dato recalcula la ruta (derecho de petición, tutela,
+    desacato o Supersalud) y te devuelve qué falta preguntar. Úsala apenas alguien cuente
+    que no le entregan un medicamento o que quiere reclamar.
+
+    Args:
+        campo: el nombre exacto del campo. Si no sabes cuál es, mira
+            `preguntas_pendientes` de la llamada anterior.
+        valor: lo que respondió el paciente, tal cual. Para los de sí/no, "sí" o "no".
+    """
+    problema = legal.validar(campo, valor)
+    if problema:
+        raise ModelRetry(problema)
+
+    campos = await db.guardar_campo_caso(ctx.deps.wa_id, campo, valor)
+    ruta, por_que = legal.decidir_ruta(campos)
+    obligatorios, opcionales = legal.pendientes(campos, ruta)
+
+    respuesta: dict[str, Any] = {
+        "guardado": {"campo": campo, "valor": valor},
+        "ruta": ruta,
+        "que_es": legal.RUTAS[ruta],
+        "por_que": por_que,
+        "preguntas_pendientes": _preguntas(obligatorios),
+        "opcionales_que_ayudarian": _preguntas(opcionales),
+        "listo_para_generar": ruta in legal.DOCUMENTOS and not obligatorios,
+    }
+    if ruta == "esperar":
+        respuesta["canales_supersalud"] = legal.SUPERSALUD_CANALES
+    return respuesta
+
+
+@ruta_legal.tool
+async def generar_documento(ctx: RunContext[Deps], tipo: str) -> dict[str, Any]:
+    """Arma el PDF del escrito y devuelve el enlace para mandárselo al paciente.
+
+    Solo genera el que corresponde a la ruta del triage: si pides otro te dice cuál
+    procede y por qué, para que se lo expliques.
+
+    Args:
+        tipo: peticion | tutela | desacato | supersalud.
+    """
+    if tipo not in legal.DOCUMENTOS:
+        raise ModelRetry(
+            f"'{tipo}' no es un documento que exista. Son: " + ", ".join(legal.DOCUMENTOS)
+        )
+
+    campos = await db.cargar_caso(ctx.deps.wa_id)
+    ruta, por_que = legal.decidir_ruta(campos)
+
+    if ruta != tipo:
+        # El bloqueo del triage. No es un error del modelo que se arregle reintentando
+        # el mismo tipo: es que ese escrito no procede y hay que explicarlo.
+        raise ModelRetry(
+            f"No se generó nada. En este caso NO procede '{tipo}' sino '{ruta}'. "
+            f"{por_que} Explícaselo al paciente con tus palabras, ofrécele el que sí "
+            f"procede y no vuelvas a pedir '{tipo}'."
+        )
+
+    obligatorios, _ = legal.faltantes(campos, tipo)
+    if obligatorios:
+        raise ModelRetry(
+            "Todavía faltan datos obligatorios para ese escrito: "
+            + "; ".join(f"{n} ({legal.CAMPOS[n].pregunta})" for n in obligatorios)
+            + ". Pregúntaselos de a uno y guárdalos con guardar_dato_caso."
+        )
+
+    pdf, marcadores = legal.generar(campos, tipo)
+    doc_id = await db.guardar_documento(ctx.deps.wa_id, tipo, pdf)
+
+    if settings.public_base_url:
+        url = f"{settings.public_base_url.rstrip('/')}/f/{doc_id}"
+        ctx.deps.adjunto = url
+    else:
+        # Sin PUBLIC_BASE_URL no hay cómo adjuntarlo (pasa en el REPL local).
+        url = f"(sin PUBLIC_BASE_URL configurada; el documento quedó guardado: {doc_id})"
+
+    return {
+        "generado": legal.NOMBRES[tipo],
+        "url": url,
+        "se_manda_como_archivo": ctx.deps.adjunto is not None,
+        "marcadores": marcadores,
+        "nota": (
+            "Léele los marcadores: son los espacios que quedaron en blanco y los tiene "
+            "que llenar a mano antes de radicar."
+            if marcadores
+            else "No quedaron espacios en blanco."
+        ),
+    }

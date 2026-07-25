@@ -110,8 +110,18 @@ CREATE INDEX IF NOT EXISTS coverage_search_trgm
 CREATE INDEX IF NOT EXISTS coverage_atc ON coverage (atc);
 
 
--- ── Tutela ────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS tutela_drafts (
+-- ── Ruta legal ────────────────────────────────────────────────────────────
+-- Un caso por número. `campos` guarda TODA la entrevista en un solo jsonb: los
+-- datos de identidad, los del caso, los de triage y los específicos de cada
+-- escrito. No se parte por tipo de documento a propósito — la mitad de los
+-- campos los comparten los cuatro, y quien decide cuál escrito procede es
+-- decidir_ruta() sobre estos mismos datos, no una elección previa del usuario.
+--
+-- Reemplaza a `tutela_drafts`, que se declaró cuando el plan era un solo
+-- documento y nunca llegó a usarse. El DROP es seguro por eso mismo.
+DROP TABLE IF EXISTS tutela_drafts;
+
+CREATE TABLE IF NOT EXISTS casos (
     wa_id       text PRIMARY KEY,
     campos      jsonb       NOT NULL DEFAULT '{}'::jsonb,
     actualizado timestamptz NOT NULL DEFAULT now()
@@ -120,6 +130,30 @@ CREATE TABLE IF NOT EXISTS tutela_drafts (
 CREATE TABLE IF NOT EXISTS documents (
     id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     wa_id     text,
+    -- peticion | tutela | desacato | supersalud. Sirve para el nombre del
+    -- archivo que se le manda al usuario y para saber qué se generó.
+    tipo      text,
     contenido bytea       NOT NULL,
+    creado    timestamptz NOT NULL DEFAULT now()
+);
+
+-- `CREATE TABLE IF NOT EXISTS` no altera una tabla que ya existe: en las bases
+-- creadas antes de la ruta legal la columna no aparece sola.
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS tipo text;
+
+
+-- ── Caché de las búsquedas web ────────────────────────────────────────────
+-- Las dos tools que salen a Perplexity Sonar guardan acá su respuesta. Lo que
+-- de verdad compra esta tabla NO es la plata ($0.005 por búsqueda): es que la
+-- demo sea REPRODUCIBLE. Sonar no es determinista, así que "Dolex" puede
+-- resolver bien en el ensayo y devolver otra cosa en la sustentación. Con
+-- caché, la segunda corrida es la primera, byte por byte. De paso, repetir una
+-- consulta pasa de ~5 s a ~5 ms, que en WhatsApp se nota.
+--
+-- El TTL se aplica al LEER (ver leer_cache_web), no hay limpieza programada:
+-- es un hackathon y la tabla no pasa de unas decenas de filas.
+CREATE TABLE IF NOT EXISTS web_cache (
+    clave     text PRIMARY KEY,   -- "identificar:dolex" | "drogueria:losartan 50"
+    respuesta jsonb       NOT NULL,
     creado    timestamptz NOT NULL DEFAULT now()
 );

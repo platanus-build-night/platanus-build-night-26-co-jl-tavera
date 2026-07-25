@@ -66,6 +66,26 @@ async def health() -> dict[str, bool]:
     return {"ok": True}
 
 
+@app.get("/f/{doc_id}")
+async def documento(doc_id: str) -> Response:
+    """Sirve un PDF generado.
+
+    **Tiene que ser público.** Twilio descarga esta URL desde sus servidores para
+    adjuntar el archivo al mensaje de WhatsApp: si pide autenticación, al usuario le
+    llega el texto sin el documento. El id es un UUID aleatorio y esa es toda la
+    protección que tiene — es un enlace no adivinable, no un recurso privado.
+    """
+    fila = await db.leer_documento(doc_id)
+    if fila is None:
+        raise HTTPException(status_code=404, detail="documento no encontrado")
+    nombre = f"curuba-{fila['tipo'] or 'documento'}.pdf"
+    return Response(
+        content=bytes(fila["contenido"]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{nombre}"'},
+    )
+
+
 def _url_publica(request: Request) -> str:
     """La URL tal como Twilio la firmó.
 
@@ -79,21 +99,29 @@ def _url_publica(request: Request) -> str:
     return url
 
 
-def _enviar(a: str, texto: str) -> None:
-    """Manda el mensaje por la API REST. Bloqueante — se llama en un thread."""
+def _enviar(a: str, texto: str, adjunto: str | None = None) -> None:
+    """Manda el mensaje por la API REST. Bloqueante — se llama en un thread.
+
+    `adjunto` es la URL de un PDF generado. Twilio la descarga de nuestra propia API
+    para adjuntarla, y por eso `GET /f/{id}` no puede pedir autenticación.
+    """
     if len(texto) > LIMITE_WHATSAPP:
         texto = texto[: LIMITE_WHATSAPP - 1] + "…"
-    _cliente().messages.create(from_=settings.twilio_whatsapp_from, to=a, body=texto)
+    extra = {"media_url": [adjunto]} if adjunto else {}
+    _cliente().messages.create(
+        from_=settings.twilio_whatsapp_from, to=a, body=texto, **extra
+    )
 
 
 async def _procesar(wa_id: str, texto: str) -> None:
     """Corre el agente y manda la respuesta. Vive fuera del ciclo del webhook."""
+    adjunto = None
     try:
         if texto.strip().lower() == "reiniciar":
             await agent.reiniciar(wa_id)
             respuesta = "Listo, borré nuestra conversación. Empecemos de nuevo 🙂"
         else:
-            respuesta = await agent.responder(wa_id, texto)
+            respuesta, adjunto = await agent.responder(wa_id, texto)
     except Exception:
         # Un background task que revienta en silencio se ve idéntico a un
         # webhook colgado. Mejor loguear y avisarle al usuario.
@@ -103,9 +131,19 @@ async def _procesar(wa_id: str, texto: str) -> None:
     try:
         # El cliente de Twilio es bloqueante: llamarlo directo aquí congela el
         # event loop mientras dura el request HTTP.
-        await to_thread.run_sync(_enviar, wa_id, respuesta)
+        await to_thread.run_sync(_enviar, wa_id, respuesta, adjunto)
     except Exception:
         log.exception("falló enviando la respuesta a %s", wa_id)
+        if adjunto:
+            # Si lo que falló fue el adjunto, el texto solo casi siempre sí pasa —
+            # y quedarse callado después de una entrevista de diez preguntas es lo
+            # peor que puede hacer.
+            try:
+                await to_thread.run_sync(
+                    _enviar, wa_id, f"{respuesta}\n\nTu documento: {adjunto}"
+                )
+            except Exception:
+                log.exception("falló también el reintento sin adjunto a %s", wa_id)
 
 
 @app.post("/webhooks/twilio/whatsapp")

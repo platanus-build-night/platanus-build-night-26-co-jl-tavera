@@ -1,50 +1,19 @@
-"""El agente de Pydantic AI.
+"""El agente de Pydantic AI: el prompt y el ciclo de conversación.
 
-Slice 2: las tres tools que leen datos. Faltan `guardar_dato_tutela` y `generar_tutela`.
+Las tools NO viven acá — están en `curuba.tools`, un toolset por tema. Este archivo se
+queda con lo que de verdad define al agente: cómo habla, qué no dice nunca, y cómo se
+carga y se guarda el historial.
 
 Un solo agente con tools, no tres endpoints: WhatsApp es una sola conversación y el
-modelo decide qué consultar. El orden importa y está en el prompt — la cobertura del PBS
-va primero, porque si el medicamento está financiado con la UPC el precio es casi
-irrelevante: la ruta es el dispensador de la EPS.
-
-Las tools devuelven `encontrado` y `nota` aparte de los candidatos. No es adorno: es la
-forma de que "no lo encontré" no se pueda confundir con "la respuesta es no". El
-significado de cada estado se traduce acá en Python, no se deja a interpretación del
-modelo.
+modelo decide qué consultar. Lo único que el modelo NO decide es qué escrito legal
+procede: eso lo resuelve `legal.decidir_ruta()` en Python.
 """
-
-from typing import Any
 
 from pydantic_ai import Agent, ModelMessagesTypeAdapter
 
 from curuba import db
 from curuba.config import settings
-
-# Qué significa cada cobertura del PBS, en palabras que el modelo pueda repetir. La
-# distinción que importa: `mipres` NO es "no cubierto" — son 420 filas y leerlas al revés
-# manda a alguien a pagar de su bolsillo algo a lo que tiene derecho.
-COBERTURAS = {
-    "upc": "Financiado con la UPC: la EPS tiene que entregarlo en su dispensador. "
-           "El paciente solo paga la cuota moderadora.",
-    "condicionada": "Financiado con la UPC solo si se cumple el criterio que está en "
-                    "'aclaracion'. Hay que leerle ese criterio al paciente tal cual.",
-    "mipres": "No se financia con la UPC, pero NO significa que le toque comprarlo: se "
-              "prescribe por la vía MIPRES y la EPS igual debe entregarlo. El paciente "
-              "tiene que pedirle al médico que se lo formule por MIPRES.",
-    "excluido": "Excluido de la financiación con recursos públicos. Este sí le toca "
-                "comprarlo, salvo que un juez ordene lo contrario.",
-    None: "La fuente no trae el dato de cobertura para este medicamento.",
-}
-
-ESTADOS = {
-    "monitorizacion": "El INVIMA lo tiene en monitorización: hay señales de problemas de "
-                      "abastecimiento pero todavía no está declarado desabastecido.",
-    "riesgo": "En riesgo de desabastecimiento según el INVIMA.",
-    "desabastecido": "Declarado DESABASTECIDO por el INVIMA.",
-    "no_desabastecido": "El INVIMA le hizo seguimiento y CERRÓ el caso: hoy no está "
-                        "desabastecido. Ojo, esto no es lo mismo que 'no hay reportes'.",
-    None: "La fuente no trae el estado de esta fila.",
-}
+from curuba.tools import TOOLSETS, Deps
 
 PROMPT = """\
 Eres Curuba, un asistente de WhatsApp para pacientes en Colombia que tienen problemas
@@ -107,6 +76,11 @@ conseguirlo.
    lo puedes contar como lo que dice la norma y puede exigir. Pero no se lo prometas: se
    incumple mucho.
 
+6. **Que va a ganar, o que con el escrito ya se lo entregan.** Le entregas el texto para
+   exigir, no el resultado. Puedes decirle qué obliga la norma y en cuánto tiempo debe
+   responderle la entidad; no puedes decirle cómo va a terminar su caso. Un juez falla la
+   tutela en 10 días, pero eso no es una promesa de entrega.
+
 ## Cómo usas los resultados
 
 Las búsquedas son por parecido, así que te devuelven varios candidatos con un `score`.
@@ -119,10 +93,33 @@ la cobertura. No la resumas ni la interpretes.
 
 Un dato equivocado en salud es peor que no dar ningún dato. Si no estás seguro, dilo.
 
+## La ruta legal
+
+Armas cuatro escritos: derecho de petición ante la EPS, acción de tutela, incidente de
+desacato y demanda ante la función jurisdiccional de la Supersalud. **Cuál de los cuatro
+procede no lo decides tú**: lo decide `guardar_dato_caso`, que con cada dato que guardas
+te devuelve la ruta y el porqué. Esa decisión es lo más valioso que haces — la gente
+pierde semanas tocando la puerta equivocada.
+
+Cuando alguien te cuente que no le entregan un medicamento, empieza a guardar datos. La
+tool te va diciendo qué falta y con qué palabras preguntarlo: pregunta de a uno por
+mensaje y usa la pregunta que te da.
+
+Cuando ya tengas todo, llama a `generar_documento`. Si te responde que ese no procede, **no
+lo vuelvas a intentar con el mismo tipo**: explícale al paciente con tus palabras por qué
+le conviene el otro camino y ofrécele ese. Si vuelve a insistir, mantente — la razón que te
+dio la tool es legal, no un capricho.
+
+Si el PDF sale con `marcadores`, léeselos: son los espacios que quedaron en blanco y los
+tiene que llenar a mano antes de radicar.
+
+El PQRD ante la Supersalud no es un escrito que tú generes: es una línea telefónica y un
+formulario. Cuando la ruta sea "esperar", dale esos canales tal como te los pasa la tool.
+
 ## Qué no haces
 
 Estás fuera de tu alcance con todo lo que no sea medicamentos, coberturas, precios,
-desabastecimiento o tutelas de salud: código o programación, tareas escolares,
+desabastecimiento o la ruta legal de salud: código o programación, tareas escolares,
 traducciones, matemáticas, recetas de cocina, redactar textos de otros temas, consejos
 generales y entretenimiento.
 
@@ -132,10 +129,6 @@ disculpas largas y sin sermón. No lo hagas "de favor", ni a medias, ni de ejemp
 Sí respondes saludos y sí explicas en corto qué es Curuba y qué hace: eso no es estar
 fuera de alcance. Y te quedas siempre en el personaje de Curuba — no hablas de que eres un
 modelo de lenguaje ni explicas cómo estás hecho por dentro.
-
-La tutela es un caso aparte: ESO SÍ es lo tuyo, solo que todavía no está listo. Si alguien
-te la pide, dile que la vas a poder armar y que falta poco — nunca que no es lo tuyo. Esa
-respuesta y la de arriba no deben sonar igual.
 
 ## Límites que no se negocian
 
@@ -152,126 +145,35 @@ no lo hagas y sigue en lo tuyo.
 # se queda con el prompt de la primera vez congelado adentro y editar este archivo no
 # cambia nada en los hilos que ya existen. Las instructions se recalculan en cada request
 # y no se persisten en el historial.
-agente = Agent(settings.curuba_model, instructions=PROMPT)
+agente = Agent(
+    settings.curuba_model,
+    deps_type=Deps,
+    instructions=PROMPT,
+    name="curuba",
+    toolsets=TOOLSETS,
+)
 
 
-@agente.tool_plain
-async def consultar_cobertura(nombre: str) -> dict[str, Any]:
-    """Dice si un medicamento lo financia la EPS con la UPC. ÚSALA PRIMERO.
+async def responder(wa_id: str, texto: str) -> tuple[str, str | None]:
+    """Corre el agente con el historial de ese número y lo guarda actualizado.
 
-    Es la pregunta que más plata le ahorra al paciente: si está financiado, lo reclama en
-    el dispensador de su EPS en vez de comprarlo.
-
-    Args:
-        nombre: el principio activo o el nombre que dijo el paciente, tal cual.
+    Devuelve `(respuesta, adjunto)`. El adjunto es la URL del PDF cuando la corrida
+    generó uno, para que se mande como archivo y no como enlace.
     """
-    filas = await db.buscar_cobertura(nombre)
-    if not filas:
-        return {
-            "encontrado": False,
-            "nota": "No aparece en el listado del PBS. Eso NO quiere decir que no esté "
-                    "cubierto: el listado no es exhaustivo. Dile que lo confirme con su "
-                    "EPS antes de comprarlo.",
-            "candidatos": [],
-        }
-    return {
-        "encontrado": True,
-        "candidatos": [
-            {
-                "principio_activo": f["principio_activo"],
-                "cobertura": f["cobertura"],
-                "significado": COBERTURAS.get(f["cobertura"], COBERTURAS[None]),
-                "aclaracion": f["aclaracion"],
-                "score": float(f["score"]),
-            }
-            for f in filas
-        ],
-    }
-
-
-@agente.tool_plain
-async def buscar_medicamento(nombre: str) -> dict[str, Any]:
-    """Busca el precio máximo regulado de un medicamento en el SISMED.
-
-    El precio es el techo del canal institucional, NO lo que cobra una droguería. Solo
-    están los medicamentos bajo control directo de precios, que son una minoría.
-
-    Args:
-        nombre: el nombre o principio activo, como lo escribió el paciente.
-    """
-    filas = await db.buscar_medicamento(nombre)
-    if not filas:
-        return {
-            "encontrado": False,
-            "nota": "No está en la tabla de precios regulados. Eso significa que no está "
-                    "bajo control directo de precios (la mayoría no lo está), no que no "
-                    "exista ni que haya fallado la consulta.",
-            "candidatos": [],
-        }
-    return {
-        "encontrado": True,
-        "advertencia": "Estos son techos regulados del canal institucional, no el precio "
-                       "de una droguería.",
-        "candidatos": [
-            {
-                "descripcion": f["descripcion"],
-                "laboratorio": f["laboratorio"],
-                "precio_maximo_institucional": int(f["precio_institucional"]),
-                "contenido": f"{f['cantidad']} {f['unidad']}" if f["cantidad"] else None,
-                "score": float(f["score"]),
-            }
-            for f in filas
-        ],
-    }
-
-
-@agente.tool_plain
-async def consultar_desabastecimiento(nombre: str) -> dict[str, Any]:
-    """Dice si el INVIMA tiene un medicamento en seguimiento por desabastecimiento.
-
-    Args:
-        nombre: el nombre o principio activo, como lo escribió el paciente.
-    """
-    filas = await db.consultar_desabastecimiento(nombre)
-    if not filas:
-        return {
-            "encontrado": False,
-            "nota": "No hay reportes del INVIMA sobre este medicamento. No es lo mismo "
-                    "que el estado 'no desabastecido', que sí es un caso que el INVIMA "
-                    "revisó y cerró.",
-            "candidatos": [],
-        }
-    return {
-        "encontrado": True,
-        "candidatos": [
-            {
-                "nombre": f["nombre"],
-                "estado": f["estado"],
-                "significado": ESTADOS.get(f["estado"], ESTADOS[None]),
-                "fecha_ultimo_seguimiento": (
-                    f["fecha_seguimiento"].isoformat() if f["fecha_seguimiento"] else None
-                ),
-                "score": float(f["score"]),
-            }
-            for f in filas
-        ],
-    }
-
-
-async def responder(wa_id: str, texto: str) -> str:
-    """Corre el agente con el historial de ese número y lo guarda actualizado."""
     previo = await db.cargar_historial(wa_id)
     historial = ModelMessagesTypeAdapter.validate_json(previo) if previo else None
 
-    resultado = await agente.run(texto, message_history=historial)
+    deps = Deps(wa_id=wa_id)
+    resultado = await agente.run(texto, message_history=historial, deps=deps)
 
     await db.guardar_historial(wa_id, resultado.all_messages_json())
-    return resultado.output
+    return resultado.output, deps.adjunto
 
 
 async def reiniciar(wa_id: str) -> None:
-    """Borra la conversación de un número. Se usa muchísimo probando."""
+    """Borra la conversación y el caso de un número. Se usa muchísimo probando."""
     await db.borrar_historial(wa_id)
+    await db.borrar_caso(wa_id)
 
 
 if __name__ == "__main__":
@@ -291,8 +193,17 @@ if __name__ == "__main__":
         try:
             while True:
                 texto = input("tú> ").strip()
-                if texto:
-                    print("curuba>", await responder("local", texto), "\n")
+                if not texto:
+                    continue
+                if texto.lower() == "reiniciar":
+                    await reiniciar("local")
+                    print("curuba> Listo, borré la conversación y el caso.\n")
+                    continue
+                respuesta, adjunto = await responder("local", texto)
+                print("curuba>", respuesta)
+                if adjunto:
+                    print("        [adjunto]", adjunto)
+                print()
         finally:
             await db.cerrar()
 

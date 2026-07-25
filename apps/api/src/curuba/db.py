@@ -3,6 +3,7 @@
 Regla del CLAUDE.md: ninguna query suelta en agent.py ni en main.py.
 """
 
+import json
 from pathlib import Path
 
 import asyncpg
@@ -107,6 +108,74 @@ async def borrar_historial(wa_id: str) -> None:
     await _p().execute("DELETE FROM conversations WHERE wa_id = $1", wa_id)
 
 
+# ── Casos de la ruta legal ────────────────────────────────────────────────
+
+async def cargar_caso(wa_id: str) -> dict:
+    """Los campos de la entrevista de ese número. {} si no ha empezado."""
+    crudo = await _p().fetchval("SELECT campos FROM casos WHERE wa_id = $1", wa_id)
+    return json.loads(crudo) if crudo else {}
+
+
+async def guardar_campo_caso(wa_id: str, campo: str, valor: str) -> dict:
+    """Guarda UN campo y devuelve el caso completo ya actualizado.
+
+    El merge se hace en Postgres con `||` y no leyendo-modificando-escribiendo en
+    Python: dos mensajes de WhatsApp del mismo número pueden entrar a la vez —cada
+    uno corre en su propio BackgroundTasks— y un round-trip de lectura y escritura
+    perdería uno de los dos campos en silencio.
+    """
+    crudo = await _p().fetchval(
+        """
+        INSERT INTO casos (wa_id, campos, actualizado)
+        VALUES ($1, jsonb_build_object($2::text, $3::text), now())
+        ON CONFLICT (wa_id) DO UPDATE
+            SET campos = casos.campos || jsonb_build_object($2::text, $3::text),
+                actualizado = now()
+        RETURNING campos
+        """,
+        wa_id,
+        campo,
+        valor,
+    )
+    return json.loads(crudo)
+
+
+async def borrar_caso(wa_id: str) -> None:
+    await _p().execute("DELETE FROM casos WHERE wa_id = $1", wa_id)
+
+
+# ── Documentos generados ──────────────────────────────────────────────────
+
+async def guardar_documento(wa_id: str, tipo: str, contenido: bytes) -> str:
+    """Guarda el PDF y devuelve su id, que es lo que va en la URL pública."""
+    return str(
+        await _p().fetchval(
+            """
+            INSERT INTO documents (wa_id, tipo, contenido)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            """,
+            wa_id,
+            tipo,
+            contenido,
+        )
+    )
+
+
+async def leer_documento(doc_id: str) -> asyncpg.Record | None:
+    """El PDF para servirlo por GET /f/{id}. None si el id no existe.
+
+    Recibe el id como texto porque viene de la URL: si no es un UUID válido
+    asyncpg levanta, y eso es un 404, no un 500.
+    """
+    try:
+        return await _p().fetchrow(
+            "SELECT tipo, contenido FROM documents WHERE id = $1::uuid", doc_id
+        )
+    except (asyncpg.DataError, ValueError):
+        return None
+
+
 # ── Búsqueda por similitud ────────────────────────────────────────────────
 #
 # Las tres búsquedas usan `<%` (word_similarity) y NO `%` (similarity), que es lo que
@@ -131,11 +200,16 @@ async def borrar_historial(wa_id: str) -> None:
 # LOSARTÁN, LOSARTÁN + AMLODIPINA y LOSARTÁN + HIDROCLOROTIAZIDA empatados en 1.00 y el
 # orden queda al azar. Con el desempate, la molécula sola queda de primera.
 
+# `precio_comercial` se arrastra pero NO entra al DISTINCT ON: agrupar también por él
+# partiría en dos las presentaciones que solo difieren ahí, que para el paciente son la
+# misma caja. Es el techo del canal comercial (mayorista hasta la droguería): sigue sin
+# ser lo que cobra un mostrador, pero está más cerca del anaquel que el institucional y
+# sirve de segunda cota para el cruce de cordura de `precio_en_drogueria`.
 _BUSCAR_MEDICAMENTO = """
 SELECT * FROM (
     SELECT DISTINCT ON (descripcion, precio_institucional)
            cum, id_mr, principio_activo, forma, via, descripcion, laboratorio,
-           cantidad, unidad, precio_institucional,
+           cantidad, unidad, precio_institucional, precio_comercial,
            round(word_similarity(curuba_norm($1), search_text)::numeric, 2) AS score
     FROM medications
     WHERE curuba_norm($1) <% search_text
@@ -202,6 +276,51 @@ async def buscar_cobertura(nombre: str, limite: int = 8) -> list[asyncpg.Record]
     tiene derecho, así que la ausencia no se puede reportar como negación.
     """
     return await _p().fetch(_BUSCAR_COBERTURA, nombre, limite)
+
+
+# ── Caché de las búsquedas web ────────────────────────────────────────────
+#
+# Ver el comentario de `web_cache` en schema.sql: esto existe sobre todo para que la
+# demo sea reproducible, no para ahorrar los $0.005 de cada búsqueda de Sonar.
+
+async def leer_cache_web(clave: str, dias: int = 7) -> dict | None:
+    """La respuesta guardada, o None si no está o ya venció.
+
+    El TTL va en el WHERE y no en un job de limpieza: una fila vencida simplemente
+    deja de leerse y la siguiente escritura la pisa por el ON CONFLICT.
+    """
+    crudo = await _p().fetchval(
+        """
+        SELECT respuesta FROM web_cache
+        WHERE clave = $1 AND creado > now() - make_interval(days => $2)
+        """,
+        clave,
+        dias,
+    )
+    return json.loads(crudo) if crudo else None
+
+
+async def guardar_cache_web(clave: str, respuesta: dict) -> None:
+    """Guarda pisando lo que hubiera. `creado` se reinicia: eso es lo que renueva el TTL."""
+    await _p().execute(
+        """
+        INSERT INTO web_cache (clave, respuesta, creado)
+        VALUES ($1, $2::jsonb, now())
+        ON CONFLICT (clave) DO UPDATE
+            SET respuesta = EXCLUDED.respuesta, creado = now()
+        """,
+        clave,
+        json.dumps(respuesta, ensure_ascii=False),
+    )
+
+
+async def borrar_cache_web() -> None:
+    """Vacía el caché. Es el comando `limpiar cache` del REPL.
+
+    Iterando el prompt de Sonar el caché estorba —te devuelve la respuesta del prompt
+    anterior—; ensayando la demo, ayuda. Por eso se prende y se apaga a mano.
+    """
+    await _p().execute("TRUNCATE web_cache")
 
 
 if __name__ == "__main__":

@@ -38,9 +38,15 @@ colorama==0.4.6
     # via
     #   click
     #   tqdm
+defusedxml==0.7.1
+    # via fpdf2
 distro==1.9.0
     # via openai
 fastapi==0.140.0
+    # via curuba (pyproject.toml)
+fonttools==4.63.0
+    # via fpdf2
+fpdf2==2.8.7
     # via curuba (pyproject.toml)
 frozenlist==1.8.0
     # via
@@ -87,6 +93,8 @@ openai==2.48.0
     # via pydantic-ai-slim
 opentelemetry-api==1.44.0
     # via pydantic-ai-slim
+pillow==12.3.0
+    # via fpdf2
 propcache==0.5.2
     # via
     #   aiohttp
