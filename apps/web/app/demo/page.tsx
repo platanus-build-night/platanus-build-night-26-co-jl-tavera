@@ -244,11 +244,10 @@ export default function Demo() {
         <h1 className="font-display text-[clamp(1.6rem,2.4vw,2.4rem)] font-semibold leading-none tracking-[-0.035em] text-curuba">
           Curuba <span className="text-crema/75">· la corrida del agente, en vivo</span>
         </h1>
-        {/* El rótulo y el botón hacen par y por eso se distinguen por RELLENO, no por
-            color: el estado va con contorno crema y sin relleno —es un rótulo, no un
-            objeto de la página, así que tampoco lleva sombra: no tiene de qué colgar— y
-            el reset va relleno, porque sí es un objeto y se aprieta. Ninguno de los dos
-            usa amarillo, para no competir con el grafo.
+        {/* El rótulo y el botón hacen par: los dos van con contorno crema y sin relleno,
+            y ninguno lleva sombra sólida —sobre el mat verde no tienen de qué colgar—.
+            Lo único que cambia de color es el botón al armarse, que pasa a `pulpa`
+            (6,04:1 sobre monte, AA). Nada de amarillo, para no competir con el grafo.
             `items-stretch` es lo que los deja exactamente de la misma altura sin fijarle
             una a ninguno. */}
         <div className="flex w-full items-stretch gap-2">
@@ -277,8 +276,8 @@ export default function Demo() {
             onClick={reiniciar}
             disabled={!activo || borrando}
             aria-label="Borrar la conversación de la demo y empezar de cero"
-            className={`trazo shrink-0 rounded-full px-4 text-[13px] font-semibold text-monte transition-colors focus-visible:outline-crema disabled:cursor-not-allowed disabled:opacity-40 ${
-              armado ? "bg-pulpa" : "bg-crema"
+            className={`shrink-0 rounded-full border-[3px] px-4 text-[13px] font-semibold transition-colors focus-visible:outline-crema disabled:cursor-not-allowed disabled:opacity-40 ${
+              armado ? "border-pulpa text-pulpa" : "border-crema text-crema"
             }`}
           >
             {borrando ? "borrando…" : armado ? "¿seguro?" : "reiniciar"}
