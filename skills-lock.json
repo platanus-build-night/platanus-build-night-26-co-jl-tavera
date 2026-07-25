@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "fastapi-router-py": {
+      "source": "microsoft/skills",
+      "sourceType": "github",
+      "skillPath": ".github/plugins/azure-sdk-python/skills/fastapi-router-py/SKILL.md",
+      "computedHash": "5bbefb40c7227b5ddcc6bd3a0a5355b05f98394518b15fb8d88613b67c73637e"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
@@ -30,6 +36,18 @@
       "sourceType": "github",
       "skillPath": "skills/next-partial-prefetching-adoption/SKILL.md",
       "computedHash": "beaa6e1f05426a8603b0220852793896644768e32149f1cb4f2d76dd24e82304"
+    },
+    "pydantic-models-py": {
+      "source": "microsoft/skills",
+      "sourceType": "github",
+      "skillPath": ".github/plugins/azure-sdk-python/skills/pydantic-models-py/SKILL.md",
+      "computedHash": "687ccdd2b78663f30f68bba4723f133ad14bcc8618ab97058a240a05fa81aa4c"
+    },
+    "use-railway": {
+      "source": "railwayapp/railway-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/railway/skills/use-railway/SKILL.md",
+      "computedHash": "7e600b764e644985f7374dbbb37e26e49e169ca8a6e6ffdfa43b5af1f8f93637"
     },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",

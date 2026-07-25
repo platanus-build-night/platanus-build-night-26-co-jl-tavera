@@ -91,16 +91,58 @@ que conviene probar. Lo mínimo para no romper nada sin leerlo:
 
 ## Skills
 
-`.claude/skills/` está commiteado: al clonar ya vienen. Son para `apps/web` —
-`vercel-react-best-practices`, `frontend-design` y los cuatro workflows de Next.js
-(`next-dev-loop` y los de Cache Components / Partial Prefetching). Se instalaron con
-`npx skills add <repo> --skill <nombre> -a claude-code --copy -y` y se actualizan con
-`npx skills update -p`; `skills-lock.json` en la raíz es su manifiesto.
+`.claude/skills/` está commiteado: al clonar ya vienen. Todo se instala **project-local**,
+nunca a nivel de usuario. Son tres sistemas distintos y cada uno se actualiza diferente:
 
-Ojo al agregar más: `--skill '*'` trae también las skills internas del repo fuente. En
-`vercel/next.js` eso son 12 extra para contribuirle a Next.js (`backport-pr`, `v8-jit`,
-`react-vendoring`…) que no tienen nada que ver con este proyecto. Pedir las skills por
-nombre.
+**1. CLI `skills` de Vercel** → `.claude/skills/` en la raíz (9 skills), manifiesto
+`skills-lock.json`. Las seis de `apps/web` (`vercel-react-best-practices`,
+`frontend-design`, los cuatro workflows de Next.js) más `use-railway`,
+`pydantic-models-py` y `fastapi-router-py`.
+
+```bash
+npx skills add <repo> --skill <nombre> -a claude-code --copy -y
+npx skills update -p
+```
+
+**2. `library-skills`** → las skills que vienen **dentro de los paquetes instalados**.
+Ahora mismo `building-pydantic-ai-agents`, que la trae `pydantic-ai-slim`. Se corre desde
+`apps/api`, **no desde la raíz**: descubre leyendo el `.venv`, y en la raíz no hay ni
+`pyproject.toml` ni venv, así que ahí no encuentra nada —`--all` tampoco lo arregla—.
+Por eso queda en `apps/api/.claude/skills/`, scopeada a ese directorio.
+
+```bash
+cd apps/api
+uvx library-skills scan                        # ver qué hay, sin escribir
+uvx library-skills --claude --copy --no-tool-skill -y -s <nombre>
+```
+
+`library-skills` solo le hace seguimiento a lo que instala como symlink. Como en Windows
+toca `--copy`, marca la copia como `hand-authored` y sigue reportando la skill del paquete
+como `new`: **`--check` no sirve de detector de drift acá**, siempre sale 0. Al subir la
+versión de `pydantic-ai-slim` hay que volver a correr el comando de instalación a mano;
+sobreescribe la copia.
+
+**3. Plugin de Twilio** → `twilio-developer-kit@twilio`, declarado en
+`.claude/settings.json` (`--scope project`; `local` iría al `settings.local.json`, que
+está en el gitignore global y no se comparte). Un plugin se instala entero: no se pueden
+escoger skills sueltas adentro, y este trae las de 30+ productos.
+
+```bash
+claude plugin marketplace add twilio/ai --scope project
+claude plugin install twilio-developer-kit@twilio --scope project
+```
+
+Cuatro trampas al agregar más:
+
+- **`--skill '*'` trae también las skills internas del repo fuente.** En `vercel/next.js`
+  eso son 12 extra para contribuirle a Next.js (`backport-pr`, `v8-jit`,
+  `react-vendoring`…). Pedir las skills por nombre, siempre.
+- **`microsoft/skills` necesita `--full-depth`.** Sin él descubre 13 skills; con él, 182.
+  `pydantic-models-py` y `fastapi-router-py` están en el segundo grupo (cuelgan de
+  `.github/plugins/azure-sdk-python/`), así que sin la bandera falla con "skill not found".
+- **`--copy` es obligatorio en Windows.** Los tres instaladores hacen symlinks por defecto.
+- **`.agents/` está en el `.gitignore`.** Los instaladores escriben ahí una copia paralela
+  de cada skill; la que Claude lee es `.claude/skills/`.
 
 ## Tres trampas conocidas
 

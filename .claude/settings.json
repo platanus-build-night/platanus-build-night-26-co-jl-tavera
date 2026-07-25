@@ -14,5 +14,16 @@
       "Bash(git show:*)",
       "Bash(curl:*)"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "twilio": {
+      "source": {
+        "source": "github",
+        "repo": "twilio/ai"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "twilio-developer-kit@twilio": true
   }
 }

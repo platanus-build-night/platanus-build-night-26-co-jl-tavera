@@ -19,6 +19,12 @@ node_modules/
 out/
 .vercel/
 
+# Agentes: `.agents/` es la copia paralela que hacen los instaladores de skills.
+# La que Claude lee es `.claude/skills/`, y esa sí se commitea; tener las dos en
+# el repo duplicaría cada skill. Se regenera con los comandos de la sección
+# "Skills" del CLAUDE.md.
+.agents/
+
 # Sistema
 .DS_Store
 Thumbs.db
