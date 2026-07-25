@@ -92,8 +92,9 @@ Todas las fuentes en `resources/docs/RESEARCH.md`.*
 **Los dos detalles chiquitos no son decoración.** El `n=3.449` es lo que separa una
 encuesta de un titular. Y el `+17,8 %` es a propósito: la prensa titula **+17,92 %**
 porque compara contra una base redondeada de 265.000; contra el 265.173 de la serie el
-aumento es 17,8 %. El README raíz ya sostiene esa precisión —
-[ver la nota](../../README.md#las-cifras) — y la landing no la puede aflojar.
+aumento es 17,8 %. La investigación ya sostiene esa precisión —
+[ver la nota](../../resources/docs/RESEARCH.md#y-termina-en-un-juzgado) — y la landing no la
+puede aflojar.
 
 ### 3. Las tres funciones
 
@@ -250,8 +251,8 @@ logs.
 y las plataformas de deploy solo acceden a repos propios. El espejo ya existe:
 **`jl-tavera/curuba-platanus`**, y `origin` tiene dos push URLs, así que un solo `git push`
 actualiza los dos. La receta completa —y el hook `pre-push` que aborta si falta alguno de
-los dos remotos— está en [`CLAUDE.md`](../../CLAUDE.md) y en el
-[README raíz](../../README.md#deploying-vercel-render-etc).
+los dos remotos— está en [`CLAUDE.md`](../../CLAUDE.md) y en
+[`DEPLOYMENT.md`](../../resources/docs/DEPLOYMENT.md).
 
 Dos ajustes en *Settings*, y **el segundo no hereda del primero**:
 

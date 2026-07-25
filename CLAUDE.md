@@ -30,7 +30,7 @@ resources/
   data/raw/     Fuentes SISMED e INVIMA (~11 MB, SÍ van al repo)
   data/clean/   desabastecimiento.csv — derivado del PDF, es lo que lee el ETL
   data/scripts/ extraer_invima.py — de un solo uso, no es dependencia de la API
-  docs/         DEPLOYMENT.md, RESEARCH.md y DESIGN.md
+  docs/         DEPLOYMENT.md, RESEARCH.md (las cifras y sus fuentes) y DESIGN.md
 ```
 
 El estado real de cada servicio está al principio de su README, no aquí — este archivo se
