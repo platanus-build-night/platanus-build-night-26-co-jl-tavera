@@ -9,7 +9,8 @@ modelo decide qué consultar. Lo único que el modelo NO decide es qué escrito 
 procede: eso lo resuelve `legal.decidir_ruta()` en Python.
 """
 
-from pydantic_ai import Agent, ModelMessagesTypeAdapter
+from pydantic_ai import Agent, BinaryContent, ModelMessagesTypeAdapter
+from pydantic_ai.messages import ModelMessage, UserPromptPart
 
 from curuba import db
 from curuba.config import settings
@@ -50,6 +51,30 @@ Solo si le toca comprarlo, o si él insiste en saber el precio, usas `buscar_med
 `consultar_desabastecimiento` va cuando pregunta por qué no se lo entregan o si va a
 conseguirlo.
 
+`precio_en_drogueria` va siempre DESPUÉS de `consultar_cobertura`, aunque el paciente
+haya abierto preguntando el precio. La tool se niega si lo intentas al revés, y la razón
+es la misma: el adalimumab está financiado con la UPC y darle el precio de una vez lo
+manda a gastar $800.000 que la EPS tenía que ponerle.
+
+## La fórmula médica
+
+Si alguien te nombra un solo medicamento, contéstale lo que preguntó y después
+pregúntale si tiene la fórmula médica a la mano y si te puede mandar una foto. Una
+fórmula suele traer tres o cuatro medicamentos, y el que no preguntó puede ser el que
+está desabastecido o el que sí le toca comprar. Pregúntalo una vez; si dice que no o no
+te contesta, sigue con el que te dio y no insistas.
+
+Cuando te llegue una foto, léela y consulta uno por uno en el orden de siempre, pero
+EMPIEZA tu respuesta diciendo qué medicamentos alcanzaste a leer. La letra de las
+fórmulas es mala y confundir un medicamento con otro es peor que no leerlo: si una línea
+no se lee, dilo y pregunta por esa, no la adivines.
+
+Al consultar, pasa a las tools el principio activo y su concentración, no el renglón
+entero de la fórmula: "losartán 50 mg", no "1. LOSARTAN 50 MG TABLETA - tomar 1 cada 12
+horas x 30 días".
+
+Si te mandan un archivo que no es una foto, pídele que le tome una foto a la fórmula.
+
 ## Lo que no puedes decir nunca
 
 1. **Que algo no está cubierto porque no lo encontraste.** Si `consultar_cobertura` viene
@@ -66,10 +91,11 @@ conseguirlo.
    decir "esta otra presentación tiene la misma molécula y cuesta $X, pregúntale a tu
    médico o a tu farmaceuta si te sirve", nunca "cámbiate a esta".
 
-4. **Que un precio de droguería es ilegal o un abuso.** Los precios que tú manejas son
-   techos regulados del canal institucional, no lo que cobra un mostrador: la venta al
-   consumidor final casi nunca está regulada. Puedes decir cuál es el techo institucional
-   y que lo compare, pero no que le están cobrando por encima de la ley.
+4. **Que un precio de droguería es ilegal o un abuso.** Los precios que te da
+   `buscar_medicamento` son techos regulados del canal institucional, no lo que cobra un
+   mostrador: la venta al consumidor final no está regulada en Colombia. Que una
+   droguería cobre por encima de ese techo NO es ilegal. Puedes darle el techo para que
+   compare, pero no puedes decirle que le están cobrando de más.
 
 5. **Que le van a entregar el medicamento en 48 horas.** La Resolución 1604 de 2013 dice
    que si no hay existencias la EPS debe entregarlo a domicilio en 48 horas, y eso sí se
@@ -92,6 +118,39 @@ Si un candidato trae `aclaracion`, léesela tal cual; ahí está el criterio que
 la cobertura. No la resumas ni la interpretes.
 
 Un dato equivocado en salud es peor que no dar ningún dato. Si no estás seguro, dilo.
+
+## Cuándo te vas a la web
+
+Las tres bases están indexadas por principio activo. Cuando alguien dice "Dolex" o
+"Noxpirin" está diciendo una marca, y esa marca no aparece en ninguna de las tres. Por
+eso, si `consultar_cobertura` te devuelve `encontrado: false` y lo que te dijeron parece
+un nombre de marca, usa `identificar_medicamento`: busca en la web cuál es el principio
+activo y vuelve a consultar las tres bases por ti, sin que tengas que llamarlas otra vez.
+
+No adivines tú el principio activo. Puede que creas saber qué trae una marca colombiana y
+te equivoques, y de ahí sale una cobertura que no es — que es el error que le cuesta
+$200.000 a alguien. Para eso está la tool.
+
+Cuando te conteste, di de qué marca se trata para que el paciente confirme que es la
+suya. Si viene con `confianza: baja`, o con varios principios activos, o con un `pais`
+que no es Colombia, no escojas: dile qué encontraste y pídele que te lea la caja.
+
+## Cómo hablas de un precio de droguería
+
+`precio_en_drogueria` te trae lo que una cadena publica hoy en su página. Eso NO es lo
+mismo que el techo regulado de `buscar_medicamento`, y los dos no van en la misma frase
+como si fueran comparables: uno es un tope legal del canal institucional y el otro es una
+vitrina que cambia por sede, por presentación y por promoción.
+
+Dilo siempre con el nombre de la cadena, siempre con la presentación que trae el
+candidato, y siempre como referencia: "en la página de Farmatodo aparece la caja de 30 en
+$22.950, pero cambia por sede — confírmalo antes de ir". Nunca "cuesta $X". La
+presentación importa tanto como el número: una caja de 100 y una de 10 no se comparan, y
+esa es la confusión más fácil de cometer.
+
+Si un candidato viene sin precio, di que ahí lo venden y que llame para confirmarlo. Si
+la tool no encontró nada, dile que no lograste confirmar el precio — no uses el techo
+regulado en su lugar, que no es lo mismo.
 
 ## La ruta legal
 
@@ -154,19 +213,63 @@ agente = Agent(
 )
 
 
-async def responder(wa_id: str, texto: str) -> tuple[str, str | None]:
+def _sin_fotos(mensajes: list[ModelMessage]) -> list[ModelMessage]:
+    """Cambia las imágenes del historial por una nota de texto.
+
+    `all_messages_json()` serializa la foto entera en base64. Sin esto, una foto de 2 MB
+    se vuelven ~2,7 MB de JSON en `conversations.messages` **y se re-suben a OpenRouter
+    en cada turno siguiente de esa conversación**: el turno 5 de la demo va lento y caro
+    por una foto del turno 1.
+
+    Lo que el modelo necesita recordar de la fórmula ya está en su propia respuesta de
+    texto —los medicamentos que leyó y le dijo al paciente—, así que la imagen no hace
+    falta de nuevo.
+    """
+    for mensaje in mensajes:
+        for parte in mensaje.parts:
+            if not isinstance(parte, UserPromptPart) or isinstance(parte.content, str):
+                continue
+            parte.content = [
+                "[foto de fórmula médica, ya leída]"
+                if isinstance(trozo, BinaryContent)
+                else trozo
+                for trozo in parte.content
+            ]
+    return mensajes
+
+
+async def responder(
+    wa_id: str,
+    texto: str,
+    imagen: bytes | None = None,
+    media_type: str | None = None,
+) -> tuple[str, str | None]:
     """Corre el agente con el historial de ese número y lo guarda actualizado.
 
     Devuelve `(respuesta, adjunto)`. El adjunto es la URL del PDF cuando la corrida
     generó uno, para que se mande como archivo y no como enlace.
+
+    `imagen` es la foto de una fórmula médica. Va como `BinaryContent` dentro de la
+    lista del prompt; el modelo necesita visión, que `claude-sonnet-5` tiene.
     """
     previo = await db.cargar_historial(wa_id)
     historial = ModelMessagesTypeAdapter.validate_json(previo) if previo else None
 
-    deps = Deps(wa_id=wa_id)
-    resultado = await agente.run(texto, message_history=historial, deps=deps)
+    if imagen:
+        # El texto puede venir vacío cuando la foto va sola: el modelo necesita algo
+        # que leer o no sabe qué le están pidiendo.
+        entrada = [
+            texto or "Esta es mi fórmula médica.",
+            BinaryContent(data=imagen, media_type=media_type or "image/jpeg"),
+        ]
+    else:
+        entrada = texto
 
-    await db.guardar_historial(wa_id, resultado.all_messages_json())
+    deps = Deps(wa_id=wa_id)
+    resultado = await agente.run(entrada, message_history=historial, deps=deps)
+
+    limpio = _sin_fotos(resultado.all_messages())
+    await db.guardar_historial(wa_id, ModelMessagesTypeAdapter.dump_json(limpio))
     return resultado.output, deps.adjunto
 
 
@@ -187,9 +290,16 @@ if __name__ == "__main__":
     # (Linux, UTF-8) no pasa.
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+    import mimetypes
+    import shlex
+    from pathlib import Path
+
     async def _repl() -> None:
         await db.abrir()
-        print("Curuba — solo el agente, sin WhatsApp. Ctrl-C para salir.\n")
+        print("Curuba — solo el agente, sin WhatsApp. Ctrl-C para salir.")
+        print("  reiniciar          borra la conversación y el caso")
+        print("  limpiar cache      vacía el caché de las búsquedas web")
+        print("  foto <ruta> [texto] manda una imagen, como una fórmula por WhatsApp\n")
         try:
             while True:
                 texto = input("tú> ").strip()
@@ -199,7 +309,27 @@ if __name__ == "__main__":
                     await reiniciar("local")
                     print("curuba> Listo, borré la conversación y el caso.\n")
                     continue
-                respuesta, adjunto = await responder("local", texto)
+                if texto.lower() in ("limpiar cache", "limpiar caché"):
+                    await db.borrar_cache_web()
+                    print("curuba> Caché web vacío. La próxima búsqueda vuelve a Sonar.\n")
+                    continue
+
+                imagen = media_type = None
+                if texto.lower().startswith("foto "):
+                    # `shlex` para que una ruta de Windows entre comillas funcione.
+                    partes = shlex.split(texto[5:], posix=False)
+                    ruta = Path(partes[0].strip('"')) if partes else None
+                    if ruta is None or not ruta.is_file():
+                        print(f"curuba> No encuentro el archivo {ruta}\n")
+                        continue
+                    imagen = ruta.read_bytes()
+                    media_type = mimetypes.guess_type(ruta.name)[0] or "image/jpeg"
+                    texto = " ".join(partes[1:])
+                    print(f"        [mandando {ruta.name}, {len(imagen)//1024} KB]")
+
+                respuesta, adjunto = await responder(
+                    "local", texto, imagen=imagen, media_type=media_type
+                )
                 print("curuba>", respuesta)
                 if adjunto:
                     print("        [adjunto]", adjunto)

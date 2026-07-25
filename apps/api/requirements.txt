@@ -69,6 +69,7 @@ httptools==0.8.0
     # via uvicorn
 httpx==0.28.1
     # via
+    #   curuba (pyproject.toml)
     #   openai
     #   pydantic-ai-slim
     #   pydantic-graph
