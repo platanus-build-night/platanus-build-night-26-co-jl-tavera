@@ -6,6 +6,7 @@ Las tres trampas de este archivo están comentadas donde ocurren.
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import httpx
 from anyio import to_thread
@@ -74,6 +75,12 @@ def _cliente() -> Client:
 # sin esfuerzo. Cortamos con margen.
 LIMITE_WHATSAPP = 1500
 
+# Con `media_url` el body deja de ser un mensaje de texto y pasa a ser el CAPTION del
+# adjunto, cuyo tope es bastante más corto (~1024). Y es justo el mensaje que más se
+# alarga: el que le lee los marcadores del PDF. Con el corte de 1500 pasaba el filtro
+# nuestro y lo rechazaba WhatsApp — con el documento adentro.
+LIMITE_CAPTION = 900
+
 
 @app.get("/health")
 async def health() -> dict[str, bool]:
@@ -119,9 +126,22 @@ def _enviar(a: str, texto: str, adjunto: str | None = None) -> None:
     `adjunto` es la URL de un PDF generado. Twilio la descarga de nuestra propia API
     para adjuntarla, y por eso `GET /f/{id}` no puede pedir autenticación.
     """
-    if len(texto) > LIMITE_WHATSAPP:
-        texto = texto[: LIMITE_WHATSAPP - 1] + "…"
-    extra = {"media_url": [adjunto]} if adjunto else {}
+    limite = LIMITE_CAPTION if adjunto else LIMITE_WHATSAPP
+    if len(texto) > limite:
+        texto = texto[: limite - 1] + "…"
+
+    extra: dict[str, Any] = {"media_url": [adjunto]} if adjunto else {}
+    if settings.public_base_url:
+        # Twilio contesta 201 `queued` y SOLO DESPUÉS intenta bajar el adjunto. Si eso
+        # falla (11200 no pudo traer la URL, 12300 content-type raro, 21620 URL
+        # inválida, 63005/63021 de WhatsApp) el error llega minutos más tarde, fuera
+        # del `try` de `_procesar`: no lanza excepción, no dispara el reintento y no
+        # deja ni una línea en los logs. Sin este callback, un PDF que no llegó es
+        # indistinguible de uno que sí.
+        extra["status_callback"] = (
+            f"{settings.public_base_url.rstrip('/')}/webhooks/twilio/status"
+        )
+
     _cliente().messages.create(
         from_=settings.twilio_whatsapp_from, to=a, body=texto, **extra
     )
@@ -259,3 +279,39 @@ async def whatsapp(
         MediaContentType0 if con_media else "",
     )
     return Response(content="<Response></Response>", media_type="application/xml")
+
+
+@app.post("/webhooks/twilio/status")
+async def estado(
+    request: Request,
+    MessageSid: str = Form(""),
+    MessageStatus: str = Form(""),
+    ErrorCode: str = Form(""),
+) -> Response:
+    """Cómo terminó cada mensaje que mandamos. Lo llama Twilio, no el usuario.
+
+    Es el par de `status_callback` en `_enviar`, y existe para cerrar el único modo
+    de falla que no se veía: el adjunto que Twilio acepta con un 201 y no logra
+    descargar después. Acá no se reintenta nada — se deja el renglón que convierte
+    ese silencio en algo que se puede buscar en los logs.
+    """
+    if settings.validate_twilio_signature:
+        firma = request.headers.get("X-Twilio-Signature", "")
+        campos = {k: v for k, v in (await request.form()).items() if isinstance(v, str)}
+        if not _validador.validate(_url_publica(request), campos, firma):
+            log.warning("firma inválida en el status callback de %s", MessageSid)
+            raise HTTPException(status_code=403, detail="firma inválida")
+
+    if MessageStatus in ("failed", "undelivered"):
+        log.error(
+            "mensaje %s quedó en '%s' (ErrorCode=%s). 11200/12300/21620 significan que "
+            "Twilio NO pudo bajar el PDF de /f/{id}: revisar PUBLIC_BASE_URL y que ese "
+            "endpoint responda 200 application/pdf sin pedir autenticación",
+            MessageSid,
+            MessageStatus,
+            ErrorCode or "ninguno",
+        )
+    else:
+        log.info("mensaje %s: %s", MessageSid, MessageStatus)
+
+    return Response(status_code=204)

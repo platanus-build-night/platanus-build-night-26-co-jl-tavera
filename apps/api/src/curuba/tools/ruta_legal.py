@@ -10,6 +10,7 @@ modelo para que lo explique en sus palabras, en vez de reventar la corrida.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic_ai import ModelRetry, RunContext
@@ -18,6 +19,8 @@ from pydantic_ai.toolsets import FunctionToolset
 from curuba import db, legal
 from curuba.config import settings
 from curuba.tools.deps import Deps
+
+log = logging.getLogger("curuba")
 
 ruta_legal = FunctionToolset()
 
@@ -92,7 +95,10 @@ async def guardar_dato_caso(
 
 @ruta_legal.tool
 async def generar_documento(ctx: RunContext[Deps], tipo: str) -> dict[str, Any]:
-    """Arma el PDF del escrito y devuelve el enlace para mandárselo al paciente.
+    """Arma el PDF del escrito y lo adjunta solo al mensaje de WhatsApp.
+
+    No devuelve ningún enlace ni hay nada que pegar: el archivo sale adjunto con tu
+    respuesta. Llámala también si el paciente dice que no le llegó — es barata.
 
     Solo genera el que corresponde a la ruta del triage: si pides otro te dice cuál
     procede y por qué, para que se lo expliques.
@@ -129,38 +135,34 @@ async def generar_documento(ctx: RunContext[Deps], tipo: str) -> dict[str, Any]:
     doc_id = await db.guardar_documento(ctx.deps.wa_id, tipo, pdf)
 
     if settings.public_base_url:
-        url = f"{settings.public_base_url.rstrip('/')}/f/{doc_id}"
-        ctx.deps.adjunto = url
+        ctx.deps.adjunto = f"{settings.public_base_url.rstrip('/')}/f/{doc_id}"
     else:
-        # Sin PUBLIC_BASE_URL no hay cómo armar el enlace (pasa en el REPL local). El
-        # escrito SÍ quedó bien: hay que decírselo al modelo con todas las letras, o
-        # lee esto como una falla y le dice al paciente que hubo un "problema técnico"
-        # justo cuando su documento está listo y guardado.
-        url = None
+        # Sin PUBLIC_BASE_URL no hay cómo armar el enlace (pasa en el REPL local).
+        #
+        # Esto NO se le cuenta al modelo, y es la lección que costó una conversación
+        # entera: lo que devuelve una tool queda grabado en el historial y se vuelve
+        # permanente, mientras que una variable de entorno que falta se arregla en
+        # cinco minutos. Cuando se mezclan, el modelo pasa el resto de la conversación
+        # creyendo que espera a que alguien arregle el servidor — y como cree eso,
+        # DEJA DE LLAMAR esta tool, así que nunca se entera de que ya funciona.
+        # Ni un redeploy lo saca de ahí: el historial sigue diciendo lo mismo.
+        #
+        # Un resultado de tool es permanente; el estado de la infraestructura es
+        # transitorio. No van en el mismo sitio.
+        log.error(
+            "PUBLIC_BASE_URL vacía: %s quedó guardado pero NO se puede adjuntar", doc_id
+        )
 
-    if url is None:
-        return {
-            "generado": legal.NOMBRES[tipo],
-            "documento_id": doc_id,
-            "marcadores": marcadores,
-            "nota": (
-                "EL DOCUMENTO SE GENERÓ BIEN y quedó guardado. Lo único que falta es "
-                "configuración del servidor (PUBLIC_BASE_URL) para poder enviarlo, así "
-                "que no hay enlace todavía. NO le digas al paciente que hubo un problema "
-                "técnico ni que falló algo suyo: dile que su documento ya está listo y "
-                "que en un momento se lo haces llegar."
-            ),
-        }
-
-    # El `url` NO se le devuelve al modelo, y eso es deliberado. Cuando lo veía, leía el
+    # El enlace NO se le devuelve al modelo, y eso es deliberado. Cuando lo veía, leía el
     # enlace como si fuera el entregable y le decía al paciente "te paso el link" — o
     # peor, "no puedo mandarte archivos por aquí, solo el enlace", que es exactamente lo
     # contrario de lo que pasa. El PDF ya viaja adjunto vía `ctx.deps.adjunto`, que lee
     # `agent.responder()` al terminar la corrida.
     #
-    # Si el envío con adjunto llegara a fallar, `main._procesar` reintenta él mismo
-    # pegando el enlace al final del texto. O sea que el modelo nunca necesita la URL:
-    # no dársela le quita la posibilidad de equivocarse con ella.
+    # El payload es IDÉNTICO en los dos casos, a propósito: es lo único durablemente
+    # cierto —se generó el escrito y estos son sus marcadores— y es lo único que
+    # merece quedar en el historial. Si el envío falla, eso lo ven los logs y el
+    # status callback de `main`, no el modelo.
     return {
         "generado": legal.NOMBRES[tipo],
         "se_adjunta_automaticamente": True,
