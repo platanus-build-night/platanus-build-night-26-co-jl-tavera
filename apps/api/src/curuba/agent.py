@@ -9,10 +9,10 @@ modelo decide qué consultar. Lo único que el modelo NO decide es qué escrito 
 procede: eso lo resuelve `legal.decidir_ruta()` en Python.
 """
 
-from pydantic_ai import Agent, BinaryContent, ModelMessagesTypeAdapter
+from pydantic_ai import Agent, BinaryContent, ModelMessagesTypeAdapter, RunContext
 from pydantic_ai.messages import ModelMessage, UserPromptPart
 
-from curuba import db
+from curuba import db, legal
 from curuba.config import settings
 from curuba.tools import TOOLSETS, Deps
 
@@ -296,6 +296,38 @@ agente = Agent(
     name="curuba",
     toolsets=TOOLSETS,
 )
+
+
+@agente.instructions
+async def caso_en_curso(ctx: RunContext[Deps]) -> str:
+    """Lo que ya está guardado de la entrevista legal, releído en cada turno.
+
+    Va en `instructions` y no en el historial a propósito, y es la otra mitad de la
+    lección que dejó el bug del PDF: el historial es permanente y el caso cambia, así
+    que el caso se recuerda desde su fuente —la tabla `casos`— cada vez.
+
+    Sin esto, el historial y el caso se pueden desincronizar y el modelo no tiene cómo
+    notarlo: si el historial se borra o se poda, los campos siguen en Postgres pero él
+    no sabe que existen y vuelve a preguntar de cero doce datos que el paciente ya dio.
+    """
+    campos = await db.cargar_caso(ctx.deps.wa_id)
+    if not campos:
+        return ""
+
+    ruta, _ = legal.decidir_ruta(campos)
+    obligatorios, _ = legal.pendientes(campos, ruta)
+    guardado = ", ".join(f"{k}: {v}" for k, v in sorted(campos.items()))
+
+    if ruta in legal.DOCUMENTOS and not obligatorios:
+        return (
+            f"## Caso ya guardado\n\nEste paciente YA completó la entrevista: {guardado}."
+            f"\n\nProcede '{ruta}' y no falta ningún dato. Si te pide su documento, llama"
+            f" `generar_documento` de una: NO le vuelvas a preguntar nada de lo de arriba."
+        )
+    return (
+        f"## Caso ya guardado\n\nEste paciente ya te contó: {guardado}.\n\nNo se lo "
+        f"vuelvas a preguntar; sigue la entrevista desde ahí."
+    )
 
 
 def _sin_fotos(mensajes: list[ModelMessage]) -> list[ModelMessage]:
