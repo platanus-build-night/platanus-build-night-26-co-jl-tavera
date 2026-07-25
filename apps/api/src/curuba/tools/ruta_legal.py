@@ -120,8 +120,25 @@ async def generar_documento(ctx: RunContext[Deps], tipo: str) -> dict[str, Any]:
         url = f"{settings.public_base_url.rstrip('/')}/f/{doc_id}"
         ctx.deps.adjunto = url
     else:
-        # Sin PUBLIC_BASE_URL no hay cómo adjuntarlo (pasa en el REPL local).
-        url = f"(sin PUBLIC_BASE_URL configurada; el documento quedó guardado: {doc_id})"
+        # Sin PUBLIC_BASE_URL no hay cómo armar el enlace (pasa en el REPL local). El
+        # escrito SÍ quedó bien: hay que decírselo al modelo con todas las letras, o
+        # lee esto como una falla y le dice al paciente que hubo un "problema técnico"
+        # justo cuando su documento está listo y guardado.
+        url = None
+
+    if url is None:
+        return {
+            "generado": legal.NOMBRES[tipo],
+            "documento_id": doc_id,
+            "marcadores": marcadores,
+            "nota": (
+                "EL DOCUMENTO SE GENERÓ BIEN y quedó guardado. Lo único que falta es "
+                "configuración del servidor (PUBLIC_BASE_URL) para poder enviarlo, así "
+                "que no hay enlace todavía. NO le digas al paciente que hubo un problema "
+                "técnico ni que falló algo suyo: dile que su documento ya está listo y "
+                "que en un momento se lo haces llegar."
+            ),
+        }
 
     return {
         "generado": legal.NOMBRES[tipo],
