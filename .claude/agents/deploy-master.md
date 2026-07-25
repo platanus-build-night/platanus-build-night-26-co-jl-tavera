@@ -144,6 +144,12 @@ ahí este síntoma no aplica — se ve igual en vuelo que terminado.)
 **Nunca diagnostiques drift de configuración contra un deploy no terminal.** Espera a
 `SUCCESS`/`FAILED` y vuelve a mirar.
 
+Y hay una segunda forma de inventarse un drift que no existe: **consultar el
+`serviceInstance` no muestra lo que dice el `railway.json`.** Esa query devuelve
+`startCommand: null`, `healthcheckPath: null`, `watchPatterns: []` incluso con todo bien
+puesto, porque lee solo la capa del dashboard. Lo que de verdad se aplicó está en
+`meta.fileServiceManifest` del deployment. Si vas a verificar config, mírala ahí.
+
 ### Root Directory y Config file path
 
 Son **dos ajustes distintos y el segundo no hereda del primero**, y hay que ponerlos en
@@ -156,6 +162,18 @@ Son **dos ajustes distintos y el segundo no hereda del primero**, y hay que pone
 
 Sin el segundo, Railway busca el config en la raíz del repo, no lo encuentra, se inventa un
 start command y el deploy falla con un error que no menciona nada de esto.
+
+**Ninguno de los dos se puede poner con el CLI.** No hay bandera en `railway add` ni en
+`railway service source connect`; van por GraphQL, con la mutación `serviceInstanceUpdate`
+y los campos `rootDirectory` y `railwayConfigFile` (usa `scripts/railway-api.sh` de la
+skill). De ahí sale el orden correcto para crear un servicio nuevo: **crear vacío →
+configurar → y solo al final conectar el repo**. Si conectas primero, el primer build sale
+con la config equivocada y toca esperar a que falle.
+
+> Dato de campo: `railwayConfigFile` está en `null` en `curuba-platanus` y sus deployments
+> igual traen `configFile: /apps/api/railway.json`. Railway encuentra solo el `railway.json`
+> que esté dentro del Root Directory. Ponerlo explícito sigue siendo lo correcto, pero no
+> es lo que rompe el deploy — no pierdas el turno ahí.
 
 ### Twilio
 
@@ -234,12 +252,20 @@ el que se comparte esta página.
 Los dos `railway.json` traen `watchPatterns` (`apps/api/**` y `apps/web/**`) para que cada
 servicio solo reaccione a lo suyo.
 
-Y la falla espejo, que es **la peligrosa porque es silenciosa**: si después de un push
-**ningún** servicio se despliega, el patrón no está matcheando. La doc de Railway no dice
-si los globs se evalúan contra la raíz del repo o contra el Root Directory del servicio;
-aquí se asumió la raíz. Si resulta que no, **quita `watchPatterns` de los dos archivos** y
-vuelve al comportamiento de siempre — un deploy de más es barato, un deploy que nunca sale
-en medio de una demo no.
+**Se evalúan contra la raíz del repo**, no contra el Root Directory del servicio. La doc de
+Railway no lo dice; se comprobó en vivo por los dos lados al montar `curuba-web`.
+
+Y la falla espejo — que un push no despliegue nada — **no es silenciosa**: Railway registra
+el deployment en estado **`SKIPPED`** y deja corriendo el anterior. Eso lo vuelve
+diagnosticable, y la distinción importa:
+
+| Qué ves tras un push | Qué significa |
+|---|---|
+| `SKIPPED` en los dos servicios | Los `watchPatterns` filtraron el commit. Normal si solo tocaste docs |
+| `SKIPPED` en el que sí debía construir | El patrón está mal. Quítalo de los dos `railway.json` |
+| **Ningún deployment nuevo** | Otra cosa: el push no llegó a GitHub, o Railway no mira esa rama |
+
+Un deploy de más es barato; un deploy que nunca sale en medio de una demo, no.
 
 ## Verificar: nunca reportes éxito sin verlo
 
