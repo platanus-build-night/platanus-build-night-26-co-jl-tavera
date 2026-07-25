@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* Los colores salen del logo: verde oscuro delineando rellenos planos amarillos
+   y naranjas. La paleta pasa AA en las dos direcciones —tinta sobre relleno y
+   relleno sobre tinta— así que se puede invertir por sección sin revisar nada.
+
+   monte sobre curuba   8,64:1  AAA
+   monte sobre pulpa    6,04:1  AA
+   blanco sobre monte  12,24:1  AAA
+   monte sobre crema     >12:1  AAA  */
+@theme {
+  --color-monte: #123d22;
+  --color-curuba: #f5d76e;
+  --color-pulpa: #f5a623;
+  --color-hoja: #5cb246;
+  --color-crema: #fbf3d9;
+}
+
+@theme inline {
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+body {
+  background: var(--color-monte);
+  color: var(--color-monte);
+  font-family: var(--font-body);
+}
+
+/* El trazo del logo, llevado a los objetos de la página: contorno grueso,
+   relleno plano, sombra sólida desplazada. Sin blur y sin degradados. */
+@utility trazo {
+  border: 3px solid var(--color-monte);
+}
+
+@utility sombra {
+  box-shadow: 6px 6px 0 var(--color-monte);
+}
+
+@utility sombra-sm {
+  box-shadow: 3px 3px 0 var(--color-monte);
+}
+
+/* El foco toma el color del texto, que por construcción ya contrasta con su
+   fondo. La excepción es el botón —texto blanco sobre verde— donde el borde
+   caería sobre el amarillo de la tarjeta y desaparecería. */
+:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.cta:focus-visible {
+  outline-color: var(--color-monte);
+}
+
+@keyframes subir {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility entra {
+  animation: subir 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* Apagar el movimiento sin esconder nada: `both` deja el fotograma final
+   puesto, así que la página aparece completa en lugar de vacía. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
