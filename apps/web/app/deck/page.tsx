@@ -200,7 +200,7 @@ function Burbujas({ chat, animada = false }: { chat: Burbuja[]; animada?: boolea
 
 function Telefono({ chat, animada = false }: { chat: Burbuja[]; animada?: boolean }) {
   return (
-    <div className="trazo sombra flex h-[clamp(15rem,50svh,30rem)] w-[300px] shrink-0 flex-col rounded-[2rem] bg-monte p-2">
+    <div className="trazo sombra flex h-[clamp(16rem,72svh,36rem)] w-[320px] shrink-0 flex-col rounded-[2rem] bg-monte p-2">
       <div className="trazo flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] bg-crema">
         <div className="flex shrink-0 items-center gap-2 border-b-[3px] border-monte bg-hoja px-3 py-2">
           <IconoWhatsApp className="h-5 w-5 text-monte" />
@@ -249,7 +249,9 @@ const CTA = (
 // acá cada lámina tiene que caber entera en la ventana, y un proyector de 1280
 // de ancho puede traer 720 de alto o menos. Con `vw` solo, el titular se pasa de
 // largo justo en la pantalla donde nadie lo puede arreglar.
-const SLIDES: { fondo: string; nodo: React.ReactNode }[] = [
+// `pad` es la excepción: casi toda lámina usa el margen de la tarjeta, pero la que
+// lleva el celular necesita el alto y ahí el margen es lo primero que sobra.
+const SLIDES: { fondo: string; nodo: React.ReactNode; pad?: string }[] = [
   // 1 · Portada
   {
     fondo: "bg-curuba",
@@ -276,9 +278,10 @@ const SLIDES: { fondo: string; nodo: React.ReactNode }[] = [
   // 2 · Qué hace
   {
     fondo: "bg-curuba",
+    pad: "px-5 py-2 sm:px-8",
     nodo: (
-      <div className="flex h-full flex-col items-center justify-center gap-10 lg:flex-row lg:gap-16">
-        <div className="max-w-[34ch]">
+      <div className="flex h-full flex-col items-center justify-center gap-6 lg:flex-row lg:justify-between lg:gap-10">
+        <div className="max-w-[34ch] lg:flex-1">
           <Rotulo>Qué hace</Rotulo>
           <p className="mt-5 text-[clamp(1rem,min(2.1vw,3.4svh),1.9rem)] leading-tight text-monte">
             ¿Cuánto debería costar tu medicamento? ¿Y qué hacer si tu EPS no te lo entrega?
@@ -487,7 +490,12 @@ export default function Deck() {
         aria-live="polite"
       >
         {/* `key` remonta la lámina para que `entra` corra en cada cambio. */}
-        <div key={i} className="entra sin-barra min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-12">
+        <div
+          key={i}
+          className={`entra sin-barra min-h-0 flex-1 overflow-y-auto ${
+            slide.pad ?? "px-6 py-6 sm:px-12"
+          }`}
+        >
           {slide.nodo}
         </div>
 
