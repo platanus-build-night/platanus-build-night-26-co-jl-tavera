@@ -51,12 +51,51 @@ contenido; el corte congelado que usa Curuba está en `resources/data/raw/invima
 - SaluData — **explicación de las clasificaciones del INVIMA**:
   https://saludata.saludcapital.gov.co/osb/consulta-la-nueva-actualizacion-del-listado-de-abastecimiento-y-desabastecimiento-de-medicamentos-del-invima/
 
+## PBS — cobertura con cargo a la UPC
+
+La fuente que contesta la pregunta que va **antes** que el precio: si el medicamento está
+financiado con la UPC, la ruta es el dispensador de la EPS y no la droguería. Comparar
+precios ahorra 20–40 %; enrutar bien ahorra ~100 %. El detalle de columnas y las tres
+sorpresas están en [`data/README.md`](../data/README.md).
+
+- Datos Abiertos Colombia — Medicamentos del PBS (**el CSV que carga el ETL**):
+  https://www.datos.gov.co/Salud-y-Protecci-n-Social/Medicamentos-del-PBS/jtqe-tuvf
+  Corte 2026-07-24, 2.067 filas, commiteado en `resources/data/raw/pbs/`.
+- **Resolución 2808 de 2022** — define el PBS con cargo a la UPC. Los artículos 38, 46 y 52
+  son los que cita textualmente la columna `Aclaracion` del CSV para condicionar la
+  cobertura:
+  https://www.minsalud.gov.co/Normatividad_Nuevo/Resoluci%C3%B3n%20No.%202808%20de%202022.pdf
+- Minsalud — **ABECÉ MIPRES** (qué es y cómo funciona la vía de prescripción de lo **no**
+  financiado con UPC; que un medicamento salga como MIPRES **no** significa que el paciente
+  tenga que comprarlo — son las 420 filas de la sorpresa 1 de `data/README.md`):
+  https://www.minsalud.gov.co/sites/rid/Lists/BibliotecaDigital/RIDE/VP/AF/abece-ctc-reporte-prescripcion.pdf
+- Minsalud — Manual de usuario del módulo de prescripción MIPRES No UPC:
+  https://www.minsalud.gov.co/sites/rid/Lists/BibliotecaDigital/RIDE/DE/DIJ/manual-usuario-modulo-prescripcion-tecnologias-salud-no-financiadas-upc-servicios-complementarios-mipres-no-upc.pdf
+- **Resolución 1604 de 2013** — entrega de medicamentos no disponibles: domicilio en 48 h.
+  Es el respaldo de lo que Curuba le dice al paciente cuando en el dispensador le dicen "no
+  hay". El derecho existe, pero el incumplimiento es alto: **no se promete la entrega**, se
+  le da al paciente el texto de la norma para exigirla:
+  https://www.minsalud.gov.co/sites/rid/Lists/BibliotecaDigital/RIDE/DE/DIJ/resolucion-1604-de-2013.pdf
+
+⚠️ **Esta fuente no se puede leer al revés.** El listado no es exhaustivo y el cruce por
+principio activo con SISMED solo alcanza el 72,5 %. Que un medicamento no aparezca
+significa "no lo encontré", nunca "no está cubierto" — un falso negativo manda a alguien a
+pagar de su bolsillo algo que le corresponde.
+
 ## SISMED y precios de medicamentos
 
 Fuente del pilar 1. Lo que publica es un **techo regulado**, no un precio observado — la
 distinción está desarrollada en [`data/README.md`](../data/README.md).
 
-- Datos Abiertos Colombia — Precios de Medicamentos (**el CSV que carga el ETL**):
+- Datos Abiertos Colombia — Precio máximo de venta por presentación comercial
+  (**el CSV que carga el ETL**), dataset `nauz-qkjw`:
+  https://www.datos.gov.co/resource/nauz-qkjw.json
+  Verificado el 2026-07-24 contra el CSV del repo: la primera fila de la API es idéntica
+  a la del archivo (`91` · `8` · `Ambrisentán - Sólido - Oral` · `20151854-1` · BRIXENT).
+  **Antes se citaba aquí `3t73-n4q9` ("Precios Medicamentos") como la fuente del ETL y era
+  otro dataset** — se deja abajo, pero no es el que se carga.
+- Datos Abiertos Colombia — Precios Medicamentos (`3t73-n4q9`), relacionado pero **no** es
+  el que carga el ETL:
   https://www.datos.gov.co/Salud-y-Protecci-n-Social/Precios-Medicamentos/3t73-n4q9
 - Datos Abiertos Colombia — Consulta pública de precios:
   https://www.datos.gov.co/Salud-y-Protecci-n-Social/Consulta-p-blica-de-Precios-de-Medicamentos/3he6-m866

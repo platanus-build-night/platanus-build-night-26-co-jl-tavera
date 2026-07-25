@@ -4,13 +4,17 @@ El servicio que está detrás del número de WhatsApp. Recibe los mensajes que r
 Twilio, corre el agente y responde: cotiza fórmulas contra SISMED, consulta
 desabastecimientos del INVIMA y genera el PDF de una tutela.
 
-> **Estado: el esqueleto camina; faltan las tools.** Ya existen `config.py`, `agent.py` y
-> `main.py`: el webhook de Twilio responde, el agente contesta en español por OpenRouter y
-> recuerda el hilo (en RAM, no en Postgres todavía). **Todavía no existen** `db.py`,
-> `tutela.py`, `etl.py`, `schema.sql`, las cuatro tools, `GET /f/{id}` ni la lectura de
-> fotos. Todo lo de abajo sigue siendo el destino, no el estado actual.
+> **Estado: los datos y las tres tools que los leen ya funcionan; falta la tutela.**
+> Existen `config.py`, `db.py`, `agent.py`, `main.py`, `etl.py` y `schema.sql`. Las tres
+> fuentes están cargadas en Postgres (2.067 / 38.731 / 783 filas) y el agente contesta
+> con `consultar_cobertura`, `buscar_medicamento` y `consultar_desabastecimiento`. El
+> historial está en Postgres, no en RAM.
+> **Todavía no existen** `tutela.py`, `DejaVuSans.ttf`, `guardar_dato_tutela`,
+> `generar_tutela`, `GET /f/{id}` ni la lectura de fotos. Tampoco está declarado `fpdf2`
+> en `pyproject.toml`, ni `PUBLIC_BASE_URL` en `config.py`: los dos hacen falta para ese
+> slice.
 
-**Lo importante de la arquitectura: es un solo agente con cuatro tools, no tres
+**Lo importante de la arquitectura: es un solo agente con cinco tools, no tres
 endpoints.** WhatsApp es una sola conversación, así que no hay ruteo por palabras clave
 ni menús — el modelo decide qué tool usar. Eso es lo que permite que "mándame una foto de
 tu fórmula", "¿el losartán está desabastecido?" y "quiero hacer una tutela" convivan en el
@@ -60,14 +64,26 @@ apps/api/
 | `schema.sql` | Tablas, extensiones e índices |
 | `DejaVuSans.ttf` | Fuente Unicode para el PDF (ver trampa #2) |
 
-## Las cuatro tools
+## Las cinco tools
 
 | Tool | Qué hace |
 |---|---|
+| `consultar_cobertura(nombre)` | Busca en el PBS si lo financia la UPC. Devuelve la cobertura (`upc`, `condicionada`, `mipres`, `excluido`), qué significa y la aclaración textual |
 | `buscar_medicamento(nombre)` | Busca en SISMED por similitud y devuelve hasta 8 candidatos con presentación, laboratorio, precio institucional y **score** |
 | `consultar_desabastecimiento(nombre)` | Busca en el seguimiento del INVIMA; devuelve estado (`monitorizacion`, `riesgo`, `desabastecido`, `no_desabastecido`) y fecha, o dice explícitamente que no hay reportes |
 | `guardar_dato_tutela(campo, valor)` | Guarda una respuesta de la entrevista y devuelve qué campos faltan |
 | `generar_tutela()` | Valida que no falte nada, arma el PDF, lo guarda y devuelve su URL pública |
+
+**`consultar_cobertura` va primero y el prompt lo dice.** Si el medicamento está
+financiado con la UPC, el precio es casi irrelevante: la ruta es el dispensador de la EPS
+pagando la cuota moderadora. Dar el precio antes manda al paciente a gastar plata que no
+tenía que gastar. Comparar precios ahorra 20–40 %; enrutar bien ahorra ~100 %.
+
+**Las tres tools de datos devuelven `encontrado` aparte de los candidatos.** Es para que
+"no lo encontré" no se pueda confundir con "la respuesta es no" — sobre todo en cobertura,
+donde el listado no es exhaustivo. Y el significado de cada estado se traduce en Python
+(`COBERTURAS` y `ESTADOS` en `agent.py`), no se deja a interpretación del modelo: `mipres`
+**no** es "cómprelo usted".
 
 **Cotizar una fórmula completa no es una tool aparte**: el agente llama
 `buscar_medicamento` una vez por medicamento y suma. Menos código y el modelo maneja
@@ -95,14 +111,36 @@ Requiere las extensiones `pg_trgm`, `unaccent` y `pgcrypto`.
 
 | Tabla | Para qué |
 |---|---|
+| `coverage` | PBS. Principio activo, ATC y cobertura con cargo a la UPC |
 | `medications` | SISMED. PK `cum` |
 | `shortages` | INVIMA. Nombre, ATC, estado |
 | `conversations` | PK `wa_id`, historial de Pydantic AI serializado en `jsonb` |
 | `tutela_drafts` | PK `wa_id`, respuestas de procedibilidad en `jsonb` |
 | `documents` | PDFs generados en `bytea`, servidos por `GET /f/{id}` |
 
-`medications` y `shortages` llevan una columna generada `search_text` con el texto
-normalizado, e índice GIN `gin_trgm_ops` encima.
+`coverage`, `medications` y `shortages` llevan una columna generada `search_text` con el
+texto normalizado, e índice GIN `gin_trgm_ops` encima.
+
+### `coverage`
+
+La PK es un `serial` y **no** el ATC: `CodigoATC` se repite (1.469 distintos en 2.067
+filas) y, peor, dentro de un mismo ATC la cobertura cambia — `N02BE51` tiene 29 filas de
+combinaciones de acetaminofén repartidas entre `upc`, `condicionada` y `mipres`. La
+búsqueda va por principio activo (2.007 distintos, casi único); el ATC solo sirve para
+cruzar con `shortages`.
+
+| Columna | De dónde sale |
+|---|---|
+| `atc` | `CodigoATC` |
+| `principio_activo` | `PrincipioActivo`. Es la llave de búsqueda |
+| `forma` | `FormaFarmaceutica`. `Resumen` es idéntica y se descarta |
+| `cobertura` | `CoberturaPlanBeneficiosUPC` normalizada a `upc` \| `condicionada` \| `mipres` \| `excluido` \| `NULL` |
+| `aclaracion` | `Aclaracion`, textual. `Sin dato` (1.061 filas) se guarda como `NULL` |
+
+**`mipres` no es "no cubierto"** — son 420 filas y es otra vía de prescripción que la EPS
+igual debe surtir. Y como el listado no es exhaustivo (el cruce con SISMED por principio
+activo llega al 72,5 %), la ausencia se reporta como "no lo encontré", nunca como
+negación. El detalle está en [`resources/data/README.md`](../../resources/data/README.md).
 
 ### `medications`
 
@@ -215,8 +253,9 @@ El modelo necesita visión para leer fotos de fórmulas. Las imágenes se pasan 
 cd apps/api
 cp .env.example .env          # llenar las variables de arriba
 
-uv sync --extra etl           # el extra 'etl' trae pandas y openpyxl
+uv sync                       # el ETL no necesita el extra: usa csv de la stdlib
 uv run python -m curuba.etl   # crea el esquema y carga resources/data/
+uv run python -m curuba.etl --solo pbs --limite 100   # una fuente, unas pocas filas
 uv run uvicorn curuba.main:app --app-dir src --reload
 ```
 
@@ -236,9 +275,11 @@ borrador de tutela — se usa mucho mientras se prueba.
 - Builder **Nixpacks**, con un `requirements.txt` commiteado.
 - Start: `uvicorn curuba.main:app --app-dir src --host 0.0.0.0 --port $PORT`
 - Healthcheck: `/health`
-- **Las dependencias del ETL van en un extra opcional** (`[project.optional-dependencies]
-  etl`) para que Railway no instale pandas en cada deploy. `uv pip compile pyproject.toml
-  -o requirements.txt` no incluye los extras, así que sale bien por defecto.
+- **El ETL no agrega dependencias.** Lee los tres CSV con `csv` de la stdlib y carga con
+  el `copy_records_to_table` de asyncpg, que ya está. El extra
+  `[project.optional-dependencies] etl` (pandas, openpyxl) quedó **sin uso** — se puede
+  borrar. De todos modos `uv pip compile pyproject.toml -o requirements.txt` no incluye
+  los extras, así que Railway nunca los instaló.
 
 ## Tres trampas
 
@@ -260,21 +301,55 @@ Sin eso las tildes y la ñ salen dañadas. Y aparte: `strftime("%B")` sigue el l
 sistema, y en el contenedor sale en inglés — genera *"24 de July de 2026"* en el
 encabezado. Hay que tener los meses en español en una constante, no depender del locale.
 
-**3. El match de medicamentos nunca es exacto.** Una fórmula escrita a mano dice
-"acetaminofen 500" y SISMED dice `ACETAMINOFÉN 500 MG TABLETA RECUBIERTA`:
+**3. El match de medicamentos nunca es exacto, y `similarity()` no sirve para esto.** Una
+fórmula escrita a mano dice "losartan 50" y SISMED dice `ARAMAX - Amlodipino 2,5mg/1U +
+Losartan 50mg/1U - Sólido - Oral x 30 - MEGALABS`.
+
+La versión obvia —`similarity()` con el operador `%`— **devuelve cero filas siempre**, y
+falla en silencio: no hay error, solo un resultado vacío que parece "no existe".
+`similarity(a, b)` divide los trigramas en común sobre la unión de los dos, así que
+castiga la diferencia de longitud, y `search_text` promedia 103 caracteres contra una
+consulta de dos palabras:
+
+```
+similarity('omeprazol', 'esomeprazol nexium nexium - esomeprazol 40mg/1u ...')  -> 0.119
+word_similarity('omeprazol', <lo mismo>)                                        -> 0.800
+```
+
+Con el umbral por defecto de 0.3, la primera no pasa nunca. Va `word_similarity` con el
+operador `<%`, que mide qué tan bien encaja la consulta dentro de un pedazo del texto:
 
 ```sql
-SELECT cum, principio_activo, descripcion, precio_institucional,
-       similarity(search_text, curuba_norm($1)) AS score
-FROM medications
-WHERE search_text % curuba_norm($1)
-ORDER BY score DESC
+SELECT * FROM (
+    SELECT DISTINCT ON (descripcion, precio_institucional)
+           cum, principio_activo, descripcion, precio_institucional,
+           round(word_similarity(curuba_norm($1), search_text)::numeric, 2) AS score
+    FROM medications
+    WHERE curuba_norm($1) <% search_text
+    ORDER BY descripcion, precio_institucional,
+             word_similarity(curuba_norm($1), search_text) DESC
+) c
+ORDER BY score DESC,
+         similarity(curuba_norm(principio_activo), curuba_norm($1)) DESC
 LIMIT 8;
 ```
+
+Dos detalles que no son cosméticos:
+
+- **`similarity` sí se usa, pero solo para desempatar.** Buscar "losartan" deja `LOSARTÁN`,
+  `LOSARTÁN + AMLODIPINA` y `LOSARTÁN + HIDROCLOROTIAZIDA` empatados en 1.00; sin el
+  desempate el orden queda al azar y la molécula sola no sale de primera.
+- **`DISTINCT ON` porque un mismo producto tiene varios CUM.** Hay 8.612 grupos con
+  descripción y precio idénticos; sin eso, los 8 candidatos pueden ser la misma caja ocho
+  veces. Las presentaciones que solo cambian de laboratorio sí se conservan.
 
 Devolverle al agente los candidatos **con su score** y que desambigüe o pregunte. No
 escoger el primero en silencio: un precio equivocado en una app de salud es peor que no
 dar precio.
+
+Y ojo con el ejemplo clásico: **acetaminofén no está en SISMED** — cero filas. No es un
+bug del match, es que no está bajo control directo de precios. Sí está en el PBS y
+financiado con la UPC, que es justo el caso que justifica consultar la cobertura primero.
 
 ## Datos
 
@@ -282,6 +357,7 @@ Los archivos fuente **están en el repo**, en [`resources/data/`](../../resource
 
 | Fuente | Archivo | Qué carga el ETL | Corte |
 |---|---|---|---|
+| PBS | `resources/data/raw/pbs/Medicamentos_del_PBS_20260724.csv` (1,0 MB) | 2.067 filas | 2026-07-24 |
 | SISMED | `resources/data/raw/sismed/Precio_máximo_de_venta_..._20260724.csv` (9,5 MB) | 38.731 filas | 2026-07-24 |
 | INVIMA | `resources/data/raw/invima/LISTADO DE ABASTECIMIENTO MAYO 2026.pdf` (1,6 MB) | — | mayo 2026 |
 | INVIMA | `resources/data/clean/desabastecimiento.csv` (83 KB) | 783 filas | mayo 2026 |

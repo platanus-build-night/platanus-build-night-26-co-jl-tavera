@@ -1,6 +1,6 @@
 # Datos crudos
 
-Los dos archivos fuente **sí están en el repo** (~11 MB entre los dos). La idea es que
+Los tres archivos fuente **sí están en el repo** (~12 MB entre los tres). La idea es que
 cualquiera pueda clonar y correr el ETL, y que el corte quede congelado aunque la fuente
 publique otro después — el listado del INVIMA es de mayo de 2026 y ese PDF se reemplaza
 cada mes.
@@ -9,9 +9,22 @@ cada mes.
 |---|---|---|---|
 | `raw/sismed/` | `Precio_máximo_de_venta_de_los_medicamentos_por_presentación_comercial_20260724.csv` | 9,5 MB | 2026-07-24 |
 | `raw/invima/` | `LISTADO DE ABASTECIMIENTO MAYO 2026.pdf` | 1,6 MB | mayo 2026 |
+| `raw/pbs/` | `Medicamentos_del_PBS_20260724.csv` | 1,0 MB | 2026-07-24 |
 
 Este README documenta lo que **de verdad** traen los archivos, no lo que uno esperaría.
-Los dos tienen sorpresas y las dos importan.
+Los tres tienen sorpresas y las tres importan.
+
+**Cuál contesta qué.** No son tres fuentes intercambiables: cada una responde una pregunta
+distinta y el orden importa.
+
+| Fuente | Pregunta que contesta |
+|---|---|
+| **PBS** | ¿Te lo tienen que dar en el dispensador de tu EPS? |
+| **SISMED** | Si te toca comprarlo, ¿cuál es el techo regulado? |
+| **INVIMA** | ¿Está en seguimiento por desabastecimiento? |
+
+El PBS va primero. Si el medicamento está financiado con la UPC, el precio es casi
+irrelevante: la ruta es el dispensador, no la droguería.
 
 ---
 
@@ -242,6 +255,102 @@ Están verificados uno por uno; el script los reporta en cada corrida:
 **El chequeo que vale**: que la secuencia de `No.` sea contigua dentro de cada tabla. Si
 el ancla falla aparece un hueco — así se encontró la trampa 3, que estaba perdiendo 17
 medicamentos en silencio.
+
+---
+
+## PBS — `raw/pbs/*.csv`
+
+**Qué es.** El listado de medicamentos del Plan de Beneficios en Salud y cómo se financia
+cada uno con cargo a la UPC (Unidad de Pago por Capitación). Es la fuente que contesta
+"¿te lo tienen que dar en el dispensador?", que es la pregunta que más plata ahorra: las
+otras dos no la pueden contestar.
+
+**Fuente.** Datos Abiertos del Ministerio de Salud (datos.gov.co).
+
+**Forma del archivo.** 2.067 filas · 12 columnas · UTF-8 · separado por comas · todos los
+campos entre comillas. Ninguna columna tiene vacíos. `Id` es único.
+
+### Columnas
+
+| # | Columna | Ejemplo | Se usa |
+|---|---|---|---|
+| 1 | `Id` | `10457` | no |
+| 2 | `CodigoATC` | `G04BE10` | sí — cruce con INVIMA |
+| 3 | `PrincipioActivo` | `AVANAFIL` | sí — llave de búsqueda |
+| 4 | `RankingBusqueda` | `630` | no |
+| 5 | `Resumen` | `Incluye todas las concentraciones y formas farmacéuticas` | no — duplica la 6 |
+| 6 | `FormaFarmaceutica` | `Incluye todas las concentraciones y formas farmacéuticas` | sí |
+| 7 | `Aclaracion` | `Sin dato` | sí |
+| 8 | `ITEM` | `100` | no |
+| 9 | `PrincipioActivo_Min` | `avanafil` | no — ya se normaliza en la BD |
+| 10 | `FormaFarmaceutica_Min` | ídem en minúscula | no |
+| 11 | `CoberturaPlanBeneficiosUPC` | `Financiado con recursos de la UPC` | **sí** |
+| 12 | `CoberturaPlanBeneficiosUPC_Min` | ídem en minúscula | no |
+
+`Resumen` y `FormaFarmaceutica` son **idénticas**: los mismos 72 valores distintos con la
+misma distribución. Se guarda una sola. Las columnas `_Min` son la misma cadena en
+minúscula — no sirven, porque `curuba_norm` normaliza mejor (también quita tildes).
+
+### Sorpresa 1: la cobertura no es un booleano, son cinco estados
+
+| Valor | Filas | Qué significa de verdad |
+|---|---|---|
+| `Financiado con recursos de la UPC` | 1.447 | El dispensador de la EPS lo entrega. Costo: la cuota moderadora |
+| **`No Financiado con recursos de la UPC (MIPRES)`** | **420** | **No es "cómprelo usted".** Es otra vía de prescripción — la EPS igual tiene que surtirlo |
+| `Financiación condicionada con recursos de la UPC` | 193 | Cubierto solo si se cumple el criterio que dice `Aclaracion` |
+| `Excluido de la financiación con recursos públicos` | 6 | Este sí toca comprarlo |
+| `Sin dato` | 1 | Queda `NULL` |
+
+**Las 420 filas de MIPRES son la trampa de producto más cara del proyecto.** Leerlas como
+"no cubierto" manda a alguien a pagar de su bolsillo algo que le corresponde. Un falso
+positivo cuesta un viaje perdido al dispensador; un falso negativo cuesta $200.000. No son
+errores simétricos y el agente no los puede tratar igual.
+
+### Sorpresa 2: el ATC no identifica la cobertura
+
+`CodigoATC` **no es único** — 1.469 valores distintos en 2.067 filas. Y no es que se repita
+inofensivamente: dentro de un mismo ATC la cobertura **cambia**. `N02BE51` tiene 29 filas
+(combinaciones de acetaminofén) repartidas entre `Financiado`, `Financiación condicionada`
+y `No Financiado`:
+
+```
+N02BE51  ACETAMINOFÉN + CAFEÍNA                      Financiado con recursos de la UPC
+N02BE51  ACETAMINOFÉN + CLORFENIRAMINA               Financiación condicionada
+N02BE51  ACETAMINOFÉN + DEXTROMETORFANO + DOXILAMINA No Financiado (MIPRES)
+```
+
+Consecuencia: **la búsqueda va por principio activo, no por ATC** (2.007 valores distintos
+en 2.067 filas, casi único). El ATC se guarda para cruzar con el INVIMA, no para responder
+la pregunta de cobertura. Y si la búsqueda devuelve varios candidatos con coberturas
+distintas, hay que desambiguar — no escoger el primero.
+
+### Sorpresa 3: los cruces tienen hueco por diseño
+
+| Cruce | Llave | Cobertura |
+|---|---|---|
+| SISMED → PBS | principio activo normalizado | **425 de 586** (72,5 %) |
+| INVIMA → PBS | ATC | **320 de 511** (62,6 %) |
+
+Los que faltan no son un error de parseo: el PBS lista 2.007 principios activos y SISMED
+solo regula 586, con nomenclaturas que no siempre coinciden (`ácido hialurónico`,
+`alprostadil 20 mcg - cardiovascular`). La búsqueda por trigramas sube el porcentaje pero
+nunca llega a 100.
+
+Por eso **el listado del PBS no es exhaustivo y no se puede leer al revés**: que un
+medicamento no aparezca significa "no lo encontré", nunca "no está cubierto". Es la misma
+regla asimétrica de la sorpresa 1, ahora por el lado del match.
+
+### Detalles de parseo
+
+- **`Financiado` es subcadena de `No Financiado`.** Es la trampa 4 del INVIMA otra vez
+  (`desabastecido` ⊂ `no desabastecido`), que ya marcó 373 filas justo al revés. Probando
+  los literales en orden ingenuo, las **420 filas de MIPRES quedan como financiadas por
+  UPC** y pasan todos los chequeos en silencio. Se comparan de más largo a más corto, o se
+  compara la cadena completa.
+- `Aclaracion` dice `Sin dato` en 1.061 filas — eso es un `NULL`, no un texto para mostrar.
+- Los otros 137 valores de `Aclaracion` sí traen el criterio que condiciona la cobertura
+  (`Se prescribe vía: MIPRES`, `... según el artículo 52 de la Resolución 2808 de 2022`).
+  El agente los **cita textualmente**, no los interpreta.
 
 ---
 

@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS conversations (
 -- 6, así que de ahí se toma el primero y el último, nunca por índice.
 CREATE TABLE IF NOT EXISTS medications (
     cum                  text PRIMARY KEY,
+    -- Mercado relevante: 645 grupos. Mismo id_mr = mismo principio activo, forma y vía,
+    -- o sea que el gobierno ya hizo el clustering de equivalentes (mediana de 21
+    -- presentaciones por grupo). No se expone en ninguna tool todavía: "misma molécula"
+    -- NO es intercambiabilidad clínica y el agente no puede recomendar cambios. Se guarda
+    -- porque cuesta una columna y evita recargar 38.731 filas después.
+    id_mr                text,
     principio_activo     text,
     forma                text,
     via                  text,
@@ -50,6 +56,10 @@ CREATE TABLE IF NOT EXISTS medications (
     ) STORED
 );
 
+-- `CREATE TABLE IF NOT EXISTS` no altera una tabla que ya existe, así que en las bases
+-- que se crearon antes de que id_mr entrara al proyecto la columna no aparece sola.
+ALTER TABLE medications ADD COLUMN IF NOT EXISTS id_mr text;
+
 CREATE INDEX IF NOT EXISTS medications_search_trgm
     ON medications USING gin (search_text gin_trgm_ops);
 
@@ -69,6 +79,35 @@ CREATE TABLE IF NOT EXISTS shortages (
 
 CREATE INDEX IF NOT EXISTS shortages_search_trgm
     ON shortages USING gin (search_text gin_trgm_ops);
+
+
+-- ── PBS ───────────────────────────────────────────────────────────────────
+-- Cobertura con cargo a la UPC. Es la tabla que se consulta PRIMERO: si el medicamento
+-- está financiado, la ruta es el dispensador de la EPS y el precio es casi irrelevante.
+--
+-- Dos cosas que se ven raras y son a propósito:
+--
+--   1. La PK es serial y no el ATC. `CodigoATC` se repite (1.469 distintos en 2.067
+--      filas) y dentro de un mismo ATC la cobertura CAMBIA: N02BE51 tiene 29 filas de
+--      combinaciones de acetaminofén repartidas entre financiado, condicionada y MIPRES.
+--      Por eso la búsqueda va por principio activo (2.007 distintos, casi único) y el ATC
+--      solo sirve para cruzar con shortages.
+--   2. `cobertura` es texto de cinco valores, no un booleano. En particular `mipres` NO
+--      significa "cómprelo usted": es otra vía de prescripción que la EPS igual debe
+--      surtir. Ver resources/data/README.md.
+CREATE TABLE IF NOT EXISTS coverage (
+    id               serial PRIMARY KEY,
+    atc              text,
+    principio_activo text NOT NULL,
+    forma            text,
+    cobertura        text,   -- upc | condicionada | mipres | excluido | NULL ("Sin dato")
+    aclaracion       text,   -- el criterio, textual. El agente lo cita, no lo interpreta
+    search_text text GENERATED ALWAYS AS (curuba_norm(principio_activo)) STORED
+);
+
+CREATE INDEX IF NOT EXISTS coverage_search_trgm
+    ON coverage USING gin (search_text gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS coverage_atc ON coverage (atc);
 
 
 -- ── Tutela ────────────────────────────────────────────────────────────────
