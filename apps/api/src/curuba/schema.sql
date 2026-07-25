@@ -130,8 +130,9 @@ CREATE TABLE IF NOT EXISTS casos (
 CREATE TABLE IF NOT EXISTS documents (
     id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     wa_id     text,
-    -- peticion | tutela | desacato | supersalud. Sirve para el nombre del
-    -- archivo que se le manda al usuario y para saber qué se generó.
+    -- peticion | tutela | desacato | supersalud, y `foto` para las fórmulas que
+    -- manda el número de la demo. Sirve para el nombre del archivo que se le
+    -- manda al usuario y para saber qué se generó.
     tipo      text,
     contenido bytea       NOT NULL,
     creado    timestamptz NOT NULL DEFAULT now()
@@ -140,6 +141,15 @@ CREATE TABLE IF NOT EXISTS documents (
 -- `CREATE TABLE IF NOT EXISTS` no altera una tabla que ya existe: en las bases
 -- creadas antes de la ruta legal la columna no aparece sola.
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS tipo text;
+
+-- Esta tabla dejó de ser solo de PDF: el panel de /demo guarda acá las fotos de
+-- fórmulas para poder mostrarlas, y se sirven por el mismo GET /f/{id}. NULL se
+-- lee como application/pdf, así que las filas viejas siguen sirviendo igual.
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime text;
+
+-- El panel arma la línea de tiempo de un solo número. Sin esto es un seq scan,
+-- que hoy da igual pero se paga en cada reconexión del EventSource.
+CREATE INDEX IF NOT EXISTS documents_wa_id_idx ON documents (wa_id, creado);
 
 
 -- ── Caché de las búsquedas web ────────────────────────────────────────────

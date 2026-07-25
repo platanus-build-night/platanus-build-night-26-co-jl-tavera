@@ -28,14 +28,50 @@ apps/web/
 │   └── project-logo.png   # copiado de la raíz del repo — ver "Marca y assets"
 └── app/
     ├── layout.tsx      # metadata, og:image, favicon, fuente
-    ├── page.tsx        # la página entera
-    └── globals.css     # Tailwind
+    ├── page.tsx        # la landing entera
+    ├── globals.css     # Tailwind
+    └── demo/           # el panel de tarima — ver "El panel de /demo"
+        ├── page.tsx    # EventSource, celular, burbujas
+        └── grafo.tsx   # el mapa del agente en SVG
 ```
 
 **La landing es una sola `page.tsx`.** Los tres chats de ejemplo y las tres cifras van
 como arrays de datos dentro del archivo, no como componentes en archivos sueltos. Es la
 misma regla que sigue la API —*antes de crear uno nuevo, extender el que ya existe*— y sin
 decirlo esto termina en ocho componentes para una página que se lee en 40 segundos.
+
+## El panel de /demo
+
+Una segunda ruta, para proyectar en la sustentación: a la izquierda (3/4) el mapa del
+agente prendiéndose tool por tool mientras corre, a la derecha (1/4) un celular con la
+conversación real apareciendo en vivo —foto de la fórmula y PDF incluidos—. **Los datos son
+de verdad**: sale todo de la corrida que atiende el webhook de Twilio.
+
+Se conecta por un solo `EventSource` a `GET /demo/eventos` de la API, que la alimenta con
+`event_stream_handler` de Pydantic AI. El contrato de eventos y la red de seguridad están
+en `apps/api/src/curuba/demo.py`.
+
+Cuatro cosas que hay que saber antes de tocarla:
+
+- **Es el único `"use client"` del proyecto**, y rompe a propósito el presupuesto técnico de
+  `DESIGN.md` §10 ("la página no manda JavaScript de aplicación"). Ese presupuesto es de la
+  landing y sigue en pie: `/` compila `○ (Static)`. Una pantalla que pinta una corrida en
+  vivo no puede existir sin estado — esta es la conversación que el doc pedía tener.
+- **Solo muestra una conversación**, la de `CURUBA_DEMO_WA` en la API. Es una allowlist de
+  verdad, no un filtro de presentación: el descarte va en el emisor, así que la
+  conversación de otro paciente no entra al stream ni le queda la foto guardada.
+- **`NEXT_PUBLIC_API_URL`** es lo único nuevo que hay que poner en Railway. Sin ella cae a
+  `http://localhost:8000`, que es lo que se quiere en local.
+- **El marco del celular está duplicado**, no extraído de `page.tsx`. Sacarlo a un archivo
+  compartido obligaba a cambiarle la API a la landing —que ya está desplegada— por 30
+  líneas. Si se toca el marco de un lado, mirar el otro.
+
+El grafo son coordenadas a mano en `grafo.tsx` (`NODOS`) y el SVG de las aristas va con
+`preserveAspectRatio="none"` para que se estire exactamente como los porcentajes de las
+cajas HTML; el grosor del trazo se salva con `vectorEffect="non-scaling-stroke"`. Con
+proporción fija el grafo se recortaba unos píxeles arriba y abajo en cuanto la ventana no
+daba la proporción exacta. `RIO_ABAJO` es la única fuente de la topología: qué prende cada
+tool río abajo, y de ahí salen las aristas y los estados.
 
 ## Secciones de la página
 
@@ -261,10 +297,12 @@ falla en el build aunque funcione en local. De ahí salen el favicon y el `og:im
 |---|---|
 | `NEXT_PUBLIC_WHATSAPP_URL` | El enlace `wa.me` con el número y un texto prellenado |
 | `NEXT_PUBLIC_SITE_URL` | El dominio público, para que el `og:image` sea absoluto |
+| `NEXT_PUBLIC_API_URL` | La API, **solo para `/demo`**. En local cae a `http://localhost:8000` |
 
 ```
 NEXT_PUBLIC_WHATSAPP_URL=https://wa.me/12603057633?text=Hola%20Curuba
 NEXT_PUBLIC_SITE_URL=https://<dominio-de-railway>
+NEXT_PUBLIC_API_URL=https://<dominio-de-la-api>
 ```
 
 El número no va hardcodeado en el JSX: durante el hackathon puede cambiar, y teniéndolo en
@@ -298,7 +336,10 @@ npm install
 npm run dev
 ```
 
-No necesita la API corriendo, ni Postgres, ni túnel.
+La landing no necesita la API corriendo, ni Postgres, ni túnel. **`/demo` sí necesita la
+API** (`uvicorn` en el 8000) con `CURUBA_DEMO_WA` y `PUBLIC_BASE_URL` puestas; para moverlo
+sin Twilio, se le manda un POST form-encoded al webhook y el panel se mueve igual — está
+explicado en el `CLAUDE.md` de la raíz.
 
 ## Deploy en Railway
 

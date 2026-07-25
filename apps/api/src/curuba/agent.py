@@ -9,10 +9,12 @@ modelo decide qué consultar. Lo único que el modelo NO decide es qué escrito 
 procede: eso lo resuelve `legal.decidir_ruta()` en Python.
 """
 
+import time
+
 from pydantic_ai import Agent, BinaryContent, ModelMessagesTypeAdapter, RunContext
 from pydantic_ai.messages import ModelMessage, UserPromptPart
 
-from curuba import db, legal
+from curuba import db, demo, legal
 from curuba.config import settings
 from curuba.tools import TOOLSETS, Deps
 
@@ -383,7 +385,34 @@ async def responder(
         entrada = texto
 
     deps = Deps(wa_id=wa_id)
-    resultado = await agente.run(entrada, message_history=historial, deps=deps)
+    arranque = time.perf_counter()
+    # `event_stream_handler` es lo que alimenta el panel de /demo: da un evento por cada
+    # tool que se llama y por cada trozo de texto que escribe el modelo.
+    #
+    # OJO, esto cambia el camino de producción: con el handler puesto, `run()` ejecuta
+    # los nodos con `n.stream()` y la petición a OpenRouter pasa a modo streaming
+    # (pydantic_ai/agent/abstract.py). El resultado final es el mismo y es la ruta
+    # documentada, pero ya no es la misma llamada HTTP que antes. Lo que sostiene esto es
+    # que el handler no puede fallar hacia afuera: `demo.emitir` no levanta nunca.
+    resultado = await agente.run(
+        entrada,
+        message_history=historial,
+        deps=deps,
+        event_stream_handler=demo.manejador_eventos,
+    )
+    # `usage` es una PROPIEDAD, no un método: `resultado.usage()` compila y revienta en
+    # runtime con "'RunUsage' object is not callable" — después de que la corrida ya salió
+    # bien, así que el usuario recibe el mensaje de error genérico por nada.
+    uso = resultado.usage
+    demo.emitir(
+        wa_id,
+        "turno_fin",
+        ms=round((time.perf_counter() - arranque) * 1000),
+        requests=uso.requests,
+        input_tokens=uso.input_tokens,
+        output_tokens=uso.output_tokens,
+        cache_read_tokens=uso.cache_read_tokens,
+    )
 
     limpio = _sin_fotos(resultado.all_messages())
     await db.guardar_historial(wa_id, ModelMessagesTypeAdapter.dump_json(limpio))

@@ -11,10 +11,12 @@ from typing import Any
 import httpx
 from anyio import to_thread
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
 
-from curuba import agent, db
+from curuba import agent, db, demo
 from curuba.config import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -48,10 +50,28 @@ async def _ciclo(_: FastAPI) -> AsyncIterator[None]:
         )
 
     yield
+    # Antes de cerrar el pool: los streams del panel viven en un `while` y uvicorn espera
+    # a que las respuestas en vuelo terminen. Sin esto, apagar se queda colgado.
+    demo.cerrar_streams()
     await db.cerrar()
 
 
 app = FastAPI(title="Curuba API", lifespan=_ciclo)
+
+# El panel de /demo corre en otro dominio (el servicio `curuba-web`), así que sin esto el
+# EventSource del navegador no puede ni conectarse. Abierto a todos los orígenes a
+# propósito: los únicos GET son `/health`, `/f/{id}` —que ya es público porque Twilio lo
+# descarga— y `/demo/eventos`, que solo entrega la conversación de CURUBA_DEMO_WA. Los
+# webhooks son POST de Twilio y no los llama un navegador.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    # Con `*` en los orígenes esto TIENE que quedar en False o el navegador rechaza la
+    # respuesta entera. No hay cookies ni sesión que mandar de todas formas.
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 _validador = RequestValidator(settings.twilio_auth_token)
 
@@ -87,9 +107,19 @@ async def health() -> dict[str, bool]:
     return {"ok": True}
 
 
+# Para ponerle extensión al archivo que descarga el usuario. Si el mime no está
+# acá cae a `.bin`, que es fea pero honesta.
+EXTENSIONES = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+
+
 @app.get("/f/{doc_id}")
 async def documento(doc_id: str) -> Response:
-    """Sirve un PDF generado.
+    """Sirve un archivo generado: los cuatro escritos, y las fotos del panel.
 
     **Tiene que ser público.** Twilio descarga esta URL desde sus servidores para
     adjuntar el archivo al mensaje de WhatsApp: si pide autenticación, al usuario le
@@ -99,11 +129,33 @@ async def documento(doc_id: str) -> Response:
     fila = await db.leer_documento(doc_id)
     if fila is None:
         raise HTTPException(status_code=404, detail="documento no encontrado")
-    nombre = f"curuba-{fila['tipo'] or 'documento'}.pdf"
+    # Las filas de antes de la columna `mime` son todas PDF.
+    mime = fila["mime"] or "application/pdf"
+    nombre = f"curuba-{fila['tipo'] or 'documento'}.{EXTENSIONES.get(mime, 'bin')}"
     return Response(
         content=bytes(fila["contenido"]),
-        media_type="application/pdf",
+        media_type=mime,
         headers={"Content-Disposition": f'inline; filename="{nombre}"'},
+    )
+
+
+@app.get("/demo/eventos")
+async def demo_eventos() -> StreamingResponse:
+    """El stream que pinta el panel de /demo: el estado y después la corrida en vivo.
+
+    Solo entrega la conversación de `CURUBA_DEMO_WA`; sin esa variable no entrega nada de
+    nadie. El filtro no está acá sino en `demo.emitir()`, que es lo que garantiza que la
+    conversación de otro paciente no llegue ni a existir como evento.
+    """
+    return StreamingResponse(
+        demo.eventos(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # Sin esto un proxy con buffering se guarda los eventos y los suelta de a
+            # bloques: el panel se congela y salta en vez de ir en vivo.
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -120,6 +172,17 @@ def _url_publica(request: Request) -> str:
     return url
 
 
+def _alcanzable(url: str) -> bool:
+    """Si Twilio puede llegarle a esa URL desde sus servidores.
+
+    En local `PUBLIC_BASE_URL` apunta a localhost —hace falta para que las fotos del panel
+    de /demo tengan URL—, y Twilio rechaza el mensaje COMPLETO con un 400 21609 ("The
+    StatusCallback URL is not a valid URL") en cuanto se lo manda. O sea: poner esa
+    variable en local rompía todos los envíos, incluidos los que no llevan adjunto.
+    """
+    return url.startswith("https://") and "localhost" not in url and "127.0.0.1" not in url
+
+
 def _enviar(a: str, texto: str, adjunto: str | None = None) -> None:
     """Manda el mensaje por la API REST. Bloqueante — se llama en un thread.
 
@@ -131,7 +194,7 @@ def _enviar(a: str, texto: str, adjunto: str | None = None) -> None:
         texto = texto[: limite - 1] + "…"
 
     extra: dict[str, Any] = {"media_url": [adjunto]} if adjunto else {}
-    if settings.public_base_url:
+    if _alcanzable(settings.public_base_url):
         # Twilio contesta 201 `queued` y SOLO DESPUÉS intenta bajar el adjunto. Si eso
         # falla (11200 no pudo traer la URL, 12300 content-type raro, 21620 URL
         # inválida, 63005/63021 de WhatsApp) el error llega minutos más tarde, fuera
@@ -187,6 +250,7 @@ async def _procesar(
     """Corre el agente y manda la respuesta. Vive fuera del ciclo del webhook."""
     adjunto = None
     imagen = None
+    foto = None  # la URL de la foto, solo para el panel de /demo
     try:
         if media_url:
             if not media_tipo.startswith("image/"):
@@ -206,9 +270,15 @@ async def _procesar(
                     "medicamentos que dice la fórmula?",
                 )
                 return
+            # Solo para el número del panel, y solo para poder mostrarla: el historial
+            # sigue guardándose sin la imagen (agent._sin_fotos).
+            foto = await demo.guardar_foto(wa_id, imagen, media_tipo or "image/jpeg")
+
+        demo.emitir(wa_id, "usuario", texto=texto, foto=foto)
 
         if texto.strip().lower() == "reiniciar":
             await agent.reiniciar(wa_id)
+            demo.emitir(wa_id, "reiniciar")
             respuesta = "Listo, borré nuestra conversación. Empecemos de nuevo 🙂"
         else:
             respuesta, adjunto = await agent.responder(
@@ -219,6 +289,12 @@ async def _procesar(
         # webhook colgado. Mejor loguear y avisarle al usuario.
         log.exception("falló procesando el mensaje de %s", wa_id)
         respuesta = "Uy, algo se me dañó procesando tu mensaje. ¿Lo intentas otra vez?"
+
+    # ANTES de mandar, no después: así el panel queda completo aunque `_enviar` falle —
+    # que en local es lo normal, porque Meta rechaza con el error 63016 si el número no le
+    # escribió al sender en las últimas 24 h. Y esta es la burbuja definitiva: reemplaza
+    # lo que el panel fue escribiendo con los deltas del modelo.
+    demo.emitir(wa_id, "agente", texto=respuesta, adjunto=adjunto)
 
     try:
         # El cliente de Twilio es bloqueante: llamarlo directo aquí congela el

@@ -70,6 +70,36 @@ body {
   animation: subir 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
+/* Las dos del panel de /demo. El nodo que está corriendo pulsa un halo naranja por
+   fuera de su sombra sólida, y la arista por la que va pasando algo lleva el trazo
+   corriendo. Sin blur y sin degradados acá tampoco: el halo es un anillo sólido. */
+@keyframes pulso {
+  0%,
+  100% {
+    box-shadow: 3px 3px 0 var(--color-monte);
+  }
+  50% {
+    box-shadow:
+      3px 3px 0 var(--color-monte),
+      0 0 0 7px color-mix(in oklab, var(--color-pulpa) 45%, transparent);
+  }
+}
+
+@utility pulso {
+  animation: pulso 1.1s ease-in-out infinite;
+}
+
+@keyframes fluye {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+@utility fluir {
+  stroke-dasharray: 14 14;
+  animation: fluye 0.55s linear infinite;
+}
+
 /* Apagar el movimiento sin esconder nada: `both` deja el fotograma final
    puesto, así que la página aparece completa en lugar de vacía. */
 @media (prefers-reduced-motion: reduce) {

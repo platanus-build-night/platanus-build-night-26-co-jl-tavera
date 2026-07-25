@@ -146,34 +146,59 @@ async def borrar_caso(wa_id: str) -> None:
 
 # ── Documentos generados ──────────────────────────────────────────────────
 
-async def guardar_documento(wa_id: str, tipo: str, contenido: bytes) -> str:
-    """Guarda el PDF y devuelve su id, que es lo que va en la URL pública."""
+async def guardar_documento(
+    wa_id: str, tipo: str, contenido: bytes, mime: str | None = None
+) -> str:
+    """Guarda el archivo y devuelve su id, que es lo que va en la URL pública.
+
+    `mime` en None significa PDF — es el caso de los cuatro escritos, que son
+    todo lo que pasaba por acá antes del panel de /demo.
+    """
     return str(
         await _p().fetchval(
             """
-            INSERT INTO documents (wa_id, tipo, contenido)
-            VALUES ($1, $2, $3)
+            INSERT INTO documents (wa_id, tipo, contenido, mime)
+            VALUES ($1, $2, $3, $4)
             RETURNING id
             """,
             wa_id,
             tipo,
             contenido,
+            mime,
         )
     )
 
 
 async def leer_documento(doc_id: str) -> asyncpg.Record | None:
-    """El PDF para servirlo por GET /f/{id}. None si el id no existe.
+    """El archivo para servirlo por GET /f/{id}. None si el id no existe.
 
     Recibe el id como texto porque viene de la URL: si no es un UUID válido
     asyncpg levanta, y eso es un 404, no un 500.
     """
     try:
         return await _p().fetchrow(
-            "SELECT tipo, contenido FROM documents WHERE id = $1::uuid", doc_id
+            "SELECT tipo, contenido, mime FROM documents WHERE id = $1::uuid", doc_id
         )
     except (asyncpg.DataError, ValueError):
         return None
+
+
+async def documentos_de(wa_id: str, tipo: str | None = None) -> list[asyncpg.Record]:
+    """Los ids de lo que se le generó a un número, del más viejo al más nuevo.
+
+    Sin el `contenido`: el panel de /demo solo necesita las URL. `creado` es el
+    único timestamp por evento que hay en toda la base —`conversations` y `casos`
+    se sobreescriben— y es lo que sostiene el orden.
+    """
+    return await _p().fetch(
+        """
+        SELECT id, tipo, mime, creado FROM documents
+        WHERE wa_id = $1 AND ($2::text IS NULL OR tipo = $2)
+        ORDER BY creado
+        """,
+        wa_id,
+        tipo,
+    )
 
 
 # ── Búsqueda por similitud ────────────────────────────────────────────────

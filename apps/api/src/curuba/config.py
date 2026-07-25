@@ -53,6 +53,16 @@ class Settings(BaseSettings):
     # ngrok. Sin barra al final: los enlaces se arman como f"{base}/f/{id}".
     public_base_url: str = ""
 
+    # La ÚNICA conversación que el panel de /demo puede mostrar. Es una allowlist
+    # de un número, no un filtro de presentación: `demo.emitir()` descarta todo lo
+    # que no sea este wa_id, así que ninguna conversación de otro paciente entra al
+    # bus de eventos ni se le persiste la foto de su fórmula. Vacía —el default—
+    # deja el panel apagado y el endpoint sin nada que entregar.
+    #
+    # Acepta "3001234567", "+573001234567" o "whatsapp:+573001234567"; también
+    # "local", que es el wa_id del REPL. Ver demo.normalizar().
+    curuba_demo_wa: str = ""
+
 
 settings = Settings()
 

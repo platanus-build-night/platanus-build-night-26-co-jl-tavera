@@ -85,6 +85,7 @@ apps/api/
 | `config.py` | Settings desde el entorno con `pydantic-settings` |
 | `db.py` | Pool de asyncpg y **todo** el SQL del proyecto |
 | `agent.py` | El `Agent`: prompt del sistema y el ciclo de conversación. **Ya no tiene tools** |
+| `demo.py` | El bus de eventos y el SSE que alimentan `/demo` de la web. **Nada de acá puede romper una respuesta** |
 | `tools/` | Un `FunctionToolset` por grupo. Agregar un grupo es un archivo y un renglón en `TOOLSETS` — no se toca `agent.py` |
 | `legal/` | Campos, ruteo, plantillas y PDF. **No importa nada del agente**: se puede usar y probar solo |
 | `etl.py` | Carga `resources/data/` a Postgres — se corre en local, no en Railway |
@@ -463,8 +464,16 @@ El webhook no tiene estado. Guardar `result.all_messages_json()` en
 | Método | Ruta | Para qué |
 |---|---|---|
 | `POST` | `/webhooks/twilio/whatsapp` | Lo que llama Twilio. Form-encoded |
-| `GET` | `/f/{id}` | Sirve los PDFs. **Tiene que ser público**: Twilio lo descarga para adjuntarlo |
+| `POST` | `/webhooks/twilio/status` | Status callback: es lo único que avisa si un adjunto no se pudo bajar |
+| `GET` | `/f/{id}` | Sirve los PDF y las fotos del panel. **Tiene que ser público**: Twilio lo descarga para adjuntarlo. El `Content-Type` sale de `documents.mime`; `NULL` se lee como PDF |
+| `GET` | `/demo/eventos` | SSE que alimenta el panel de `/demo` de la web. Ver `demo.py` |
 | `GET` | `/health` | Healthcheck de Railway |
+
+Hay `CORSMiddleware` abierto a todos los orígenes **solo para GET**: el panel de `/demo`
+corre en otro dominio y sin eso el `EventSource` del navegador no se puede ni conectar. Los
+tres GET son públicos de todas formas —`/f/{id}` porque Twilio lo descarga, `/demo/eventos`
+porque solo entrega la conversación de `CURUBA_DEMO_WA`— y los webhooks son POST de Twilio,
+que no los llama un navegador.
 
 Campos del webhook: `From` (`whatsapp:+57...`), `Body`, `NumMedia`, `MediaUrl0`,
 `MediaContentType0`, `MessageSid`, `ProfileName`. Validar el header

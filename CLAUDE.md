@@ -30,8 +30,9 @@ demostrar, no para generalidad.
 apps/api/     FastAPI + Pydantic AI, va a Railway. Camina de punta a punta: webhook,
               agente con siete tools (en `tools/`), datos en Postgres, fotos de fórmulas
               y la ruta legal con sus cuatro PDF (en `legal/`)
-apps/web/     Landing en Next.js, corre en Railway como el servicio `curuba-web`. Escrita
-              y desplegada; no depende de la API
+apps/web/     Next.js en Railway, servicio `curuba-web`. Dos rutas: la landing (`/`,
+              estática, no depende de la API) y `/demo`, el panel de tarima que pinta la
+              corrida del agente en vivo leyendo el SSE de la API
 resources/
   data/raw/     Fuentes SISMED e INVIMA (~11 MB, SÍ van al repo)
   data/clean/   desabastecimiento.csv — derivado del PDF, es lo que lee el ETL
