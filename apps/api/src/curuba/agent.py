@@ -420,9 +420,15 @@ async def responder(
 
 
 async def reiniciar(wa_id: str) -> None:
-    """Borra la conversación y el caso de un número. Se usa muchísimo probando."""
+    """Borra la conversación, el caso y los archivos de un número.
+
+    Las tres, no solo la primera: el caso se relee de Postgres en cada turno
+    (`caso_en_curso`), así que borrar el historial y dejar `casos` deja al agente
+    sabiéndose la EPS y el medicamento del paciente anterior.
+    """
     await db.borrar_historial(wa_id)
     await db.borrar_caso(wa_id)
+    await db.borrar_documentos(wa_id)
 
 
 if __name__ == "__main__":

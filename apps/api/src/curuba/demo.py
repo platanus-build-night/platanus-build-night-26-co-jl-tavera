@@ -109,6 +109,15 @@ def es_demo(wa_id: str) -> bool:
     return bool(_DEMO) and wa_id == _DEMO
 
 
+def numero_demo() -> str:
+    """El wa_id del panel ya normalizado, o "" si el panel está apagado.
+
+    Lo usa el reset de `/demo`: el número sale de acá y NUNCA del request, que es lo
+    que garantiza que ese endpoint no pueda borrarle la conversación a otro paciente.
+    """
+    return _DEMO
+
+
 def _bonito(wa_id: str) -> str:
     """`whatsapp:+573001234567` → `+57 300 123 4567`, para el encabezado del chat."""
     n = wa_id.removeprefix("whatsapp:")
@@ -313,11 +322,14 @@ async def snapshot() -> dict:
     url = f"{settings.public_base_url.rstrip('/')}/f/" if settings.public_base_url else ""
 
     # Las dos correspondencias se hacen DE ATRÁS PARA ADELANTE, y esto no es un detalle:
-    # `conversations` se borra con `reiniciar` pero las filas de `documents` se quedan para
-    # siempre, así que el historial casi nunca tiene tantas marcas como filas hay. De
-    # adelante hacia atrás, la burbuja del último PDF terminaba con el nombre de un escrito
-    # de otra conversación —decía "Acción de tutela" en un derecho de petición—, y una foto
-    # recién tomada aparecía pegada al mensaje más viejo del hilo.
+    # el historial casi nunca tiene tantas marcas como filas hay en `documents`. De adelante
+    # hacia atrás, la burbuja del último PDF terminaba con el nombre de un escrito de otra
+    # conversación —decía "Acción de tutela" en un derecho de petición—, y una foto recién
+    # tomada aparecía pegada al mensaje más viejo del hilo.
+    #
+    # `reiniciar` hoy sí borra las tres tablas, así que de aquí en adelante van a la par;
+    # esto sigue haciendo falta por las filas de antes de ese cambio, y porque
+    # `conversations` se sobreescribe entero en cada turno mientras `documents` solo crece.
     for burbuja, doc_id in zip(
         reversed([b for b in burbujas if b.get("foto")]), reversed(fotos)
     ):

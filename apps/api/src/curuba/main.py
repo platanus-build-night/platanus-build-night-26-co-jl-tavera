@@ -61,15 +61,18 @@ app = FastAPI(title="Curuba API", lifespan=_ciclo)
 # El panel de /demo corre en otro dominio (el servicio `curuba-web`), así que sin esto el
 # EventSource del navegador no puede ni conectarse. Abierto a todos los orígenes a
 # propósito: los únicos GET son `/health`, `/f/{id}` —que ya es público porque Twilio lo
-# descarga— y `/demo/eventos`, que solo entrega la conversación de CURUBA_DEMO_WA. Los
-# webhooks son POST de Twilio y no los llama un navegador.
+# descarga— y `/demo/eventos`, que solo entrega la conversación de CURUBA_DEMO_WA.
+#
+# POST está por el botón de reset del panel, que sí lo llama un navegador. No le abre nada
+# a los webhooks: a esos los protege la firma de Twilio, no el CORS —que de todas formas
+# nunca impidió MANDAR un POST, solo leer la respuesta.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     # Con `*` en los orígenes esto TIENE que quedar en False o el navegador rechaza la
     # respuesta entera. No hay cookies ni sesión que mandar de todas formas.
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -157,6 +160,26 @@ async def demo_eventos() -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/demo/reiniciar")
+async def demo_reiniciar() -> dict[str, bool]:
+    """Deja el número del panel en cero. Es el botón de reset de /demo.
+
+    El wa_id sale de `demo.numero_demo()` y NUNCA del request: por construcción esto
+    no puede borrarle la conversación a otro paciente, solo al número de la tarima.
+    Es público y sin autenticación, igual que el resto del panel — quien tenga la URL
+    puede borrar los datos de prueba de la demo, y nada más.
+
+    El panel no se limpia desde el cliente: se emite `reiniciar` por el SSE y así se
+    limpian TODAS las pantallas conectadas, no solo la que apretó el botón.
+    """
+    wa_id = demo.numero_demo()
+    if not wa_id:
+        raise HTTPException(status_code=404, detail="el panel está apagado")
+    await agent.reiniciar(wa_id)
+    demo.emitir(wa_id, "reiniciar")
+    return {"ok": True}
 
 
 def _url_publica(request: Request) -> str:

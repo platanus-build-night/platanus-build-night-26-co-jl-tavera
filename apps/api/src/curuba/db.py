@@ -201,6 +201,15 @@ async def documentos_de(wa_id: str, tipo: str | None = None) -> list[asyncpg.Rec
     )
 
 
+async def borrar_documentos(wa_id: str) -> None:
+    """Borra las fotos y los escritos de un número. Va con `agent.reiniciar()`.
+
+    Los `GET /f/{id}` que ya se mandaron por WhatsApp quedan en 404 — es data de
+    prueba, y dejarla acumular es lo que descuadra el snapshot del panel.
+    """
+    await _p().execute("DELETE FROM documents WHERE wa_id = $1", wa_id)
+
+
 # ── Búsqueda por similitud ────────────────────────────────────────────────
 #
 # Las tres búsquedas usan `<%` (word_similarity) y NO `%` (similarity), que es lo que

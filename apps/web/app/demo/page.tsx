@@ -53,6 +53,11 @@ export default function Demo() {
   const [conectado, setConectado] = useState(false);
   const [numero, setNumero] = useState("");
   const [activo, setActivo] = useState(true);
+  // El reset va en dos toques —"reiniciar" y luego "¿seguro?"— y no con un confirm() del
+  // navegador: un modal encima de una pantalla proyectada se ve pésimo, y un solo clic por
+  // accidente en mitad de la demo borra la conversación que se está mostrando.
+  const [armado, setArmado] = useState(false);
+  const [borrando, setBorrando] = useState(false);
 
   // El tipo del último documento pedido, para nombrar la tarjeta del adjunto: el evento
   // `agente` trae la URL pero no qué escrito es — eso venía en los args de la tool.
@@ -189,6 +194,34 @@ export default function Demo() {
     return () => es.close();
   }, []);
 
+  // Si se armó y no se confirmó, se desarma solo: un botón que se quedó en "¿seguro?"
+  // desde hace rato es una trampa esperando el próximo clic distraído.
+  useEffect(() => {
+    if (!armado) return;
+    const t = setTimeout(() => setArmado(false), 4000);
+    return () => clearTimeout(t);
+  }, [armado]);
+
+  async function reiniciar() {
+    if (!armado) {
+      setArmado(true);
+      return;
+    }
+    setArmado(false);
+    setBorrando(true);
+    try {
+      // No se limpia el estado local acá: la API contesta emitiendo `reiniciar` por el
+      // SSE, y así se limpian todas las pantallas conectadas y no solo esta.
+      await fetch(`${API}/demo/reiniciar`, { method: "POST" });
+    } catch {
+      // Un reset que no llegó se ve en que la conversación sigue ahí. No hay nada
+      // sensato que mostrar en una pantalla de tarima, y tumbar la demo con un error
+      // sería peor.
+    } finally {
+      setBorrando(false);
+    }
+  }
+
   useEffect(() => {
     fin.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [burbujas, parcial]);
@@ -211,22 +244,46 @@ export default function Demo() {
         <h1 className="font-display text-[clamp(1.6rem,2.4vw,2.4rem)] font-semibold leading-none tracking-[-0.035em] text-curuba">
           Curuba <span className="text-crema/75">· la corrida del agente, en vivo</span>
         </h1>
-        {/* Contorno crema sin relleno: es un rótulo de estado, no un objeto de la página,
-            así que no lleva sombra sólida —no tiene de qué colgar— ni compite con el
-            amarillo del grafo. El punto sí es de color, que es lo único que hay que leer
-            de un vistazo. */}
-        <p className="flex w-full items-center justify-center gap-2 rounded-full border-[3px] border-crema px-4 py-2 font-mono text-[12px] font-medium text-crema">
-          <span
-            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-              conectado && activo ? "bg-hoja" : "bg-pulpa"
+        {/* El rótulo y el botón hacen par y por eso se distinguen por RELLENO, no por
+            color: el estado va con contorno crema y sin relleno —es un rótulo, no un
+            objeto de la página, así que tampoco lleva sombra: no tiene de qué colgar— y
+            el reset va relleno, porque sí es un objeto y se aprieta. Ninguno de los dos
+            usa amarillo, para no competir con el grafo.
+            `items-stretch` es lo que los deja exactamente de la misma altura sin fijarle
+            una a ninguno. */}
+        <div className="flex w-full items-stretch gap-2">
+          <p className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-full border-[3px] border-crema px-4 py-2 font-mono text-[12px] font-medium text-crema">
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                conectado && activo ? "bg-hoja" : "bg-pulpa"
+              }`}
+            />
+            <span className="truncate">
+              {!activo
+                ? "falta CURUBA_DEMO_WA en la API"
+                : conectado
+                  ? `escuchando ${numero}`
+                  : "reconectando…"}
+            </span>
+          </p>
+
+          {/* En fuente de cuerpo y no en mono: DESIGN.md §4 reserva la mono para datos
+              rastreables a una fuente, y "reiniciar" es una acción.
+              El foco es la trampa del §8 al revés: el default `:focus-visible` toma
+              `currentColor` —acá monte— y el anillo cae POR FUERA del pill, sobre el mat
+              verde. Monte sobre monte no existe, así que el anillo se fuerza a crema. */}
+          <button
+            type="button"
+            onClick={reiniciar}
+            disabled={!activo || borrando}
+            aria-label="Borrar la conversación de la demo y empezar de cero"
+            className={`trazo shrink-0 rounded-full px-4 text-[13px] font-semibold text-monte transition-colors focus-visible:outline-crema disabled:cursor-not-allowed disabled:opacity-40 ${
+              armado ? "bg-pulpa" : "bg-crema"
             }`}
-          />
-          {!activo
-            ? "falta CURUBA_DEMO_WA en la API"
-            : conectado
-              ? `escuchando ${numero}`
-              : "reconectando…"}
-        </p>
+          >
+            {borrando ? "borrando…" : armado ? "¿seguro?" : "reiniciar"}
+          </button>
+        </div>
       </header>
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[2.2fr_1fr]">
@@ -285,41 +342,47 @@ export default function Demo() {
         {/* Sin aviso legal acá abajo: el CLAUDE.md lo exige en el pie del PDF, en la
             respuesta de WhatsApp y en la landing, y esta es una pantalla de tarima que no
             es ninguna de las tres. Sigue saliendo donde toca. */}
-        <section className="trazo sombra flex min-h-0 flex-col rounded-[2rem] bg-monte p-2.5">
-          <div className="trazo flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] bg-crema">
-            <div className="flex shrink-0 items-center gap-2.5 border-b-[3px] border-monte bg-hoja px-4 py-3">
-              <IconoWhatsApp className="h-6 w-6 shrink-0 text-monte" />
-              <div className="min-w-0">
-                <p className="truncate font-semibold leading-none text-monte">Curuba</p>
-                <p className="mt-1.5 truncate font-mono text-[11px] leading-none text-monte/80">
-                  {numero || "sin número"}
+        {/* UNA sola caja, sin el bisel de celular que tenía antes —un marco `bg-monte` con
+            `p-2.5` y otro `trazo` adentro—. Ese marco era invisible: monte sobre el mat, que
+            también es monte. Lo único que hacía era meter la superficie crema 13 px hacia
+            adentro, así que el chat cerraba 13 px más arriba que la traza de la izquierda y
+            las dos columnas se veían descuadradas aunque sus marcos exteriores calzaban al
+            píxel. Colapsarlo alinea las dos superficies arriba y abajo.
+            `overflow-hidden` es lo que recorta la banda verde contra la esquina redondeada;
+            sin él asoma cuadrada por encima del borde. */}
+        <section className="trazo sombra flex min-h-0 flex-col overflow-hidden rounded-[2rem] bg-crema">
+          <div className="flex shrink-0 items-center gap-2.5 border-b-[3px] border-monte bg-hoja px-4 py-3">
+            <IconoWhatsApp className="h-6 w-6 shrink-0 text-monte" />
+            <div className="min-w-0">
+              <p className="truncate font-semibold leading-none text-monte">Curuba</p>
+              <p className="mt-1.5 truncate font-mono text-[11px] leading-none text-monte/80">
+                {numero || "sin número"}
+              </p>
+            </div>
+          </div>
+
+          <div className="sin-barra min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
+            {burbujas.length === 0 && !parcial ? (
+              <div className="flex h-full flex-col items-center justify-center gap-4 px-3 text-center">
+                <p className="text-[15px] leading-snug text-monte/70">
+                  Escríbele al bot y este panel se mueve solo.
                 </p>
+                <a
+                  href={WHATSAPP}
+                  className="trazo sombra-sm rounded-full bg-hoja px-4 py-2 font-mono text-[12px] font-medium text-monte"
+                >
+                  abrir WhatsApp
+                </a>
               </div>
-            </div>
+            ) : null}
 
-            <div className="sin-barra min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
-              {burbujas.length === 0 && !parcial ? (
-                <div className="flex h-full flex-col items-center justify-center gap-4 px-3 text-center">
-                  <p className="text-[15px] leading-snug text-monte/70">
-                    Escríbele al bot y este panel se mueve solo.
-                  </p>
-                  <a
-                    href={WHATSAPP}
-                    className="trazo sombra-sm rounded-full bg-hoja px-4 py-2 font-mono text-[12px] font-medium text-monte"
-                  >
-                    abrir WhatsApp
-                  </a>
-                </div>
-              ) : null}
+            {burbujas.map((b, i) => (
+              <Burbuja key={i} b={b} />
+            ))}
 
-              {burbujas.map((b, i) => (
-                <Burbuja key={i} b={b} />
-              ))}
+            {parcial ? <Burbuja b={{ de: "curuba", texto: parcial }} escribiendo /> : null}
 
-              {parcial ? <Burbuja b={{ de: "curuba", texto: parcial }} escribiendo /> : null}
-
-              <div ref={fin} />
-            </div>
+            <div ref={fin} />
           </div>
         </section>
       </div>

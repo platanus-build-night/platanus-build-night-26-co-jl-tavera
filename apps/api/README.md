@@ -469,13 +469,15 @@ El webhook no tiene estado. Guardar `result.all_messages_json()` en
 | `POST` | `/webhooks/twilio/status` | Status callback: es lo único que avisa si un adjunto no se pudo bajar |
 | `GET` | `/f/{id}` | Sirve los PDF y las fotos del panel. **Tiene que ser público**: Twilio lo descarga para adjuntarlo. El `Content-Type` sale de `documents.mime`; `NULL` se lee como PDF |
 | `GET` | `/demo/eventos` | SSE que alimenta el panel de `/demo` de la web. Ver `demo.py` |
+| `POST` | `/demo/reiniciar` | El botón de reset del panel. Borra conversación, caso y documentos de `CURUBA_DEMO_WA` y emite `reiniciar` por el SSE. El `wa_id` sale de `demo.numero_demo()`, nunca del request: no puede tocar a otro número. `404` si el panel está apagado |
 | `GET` | `/health` | Healthcheck de Railway |
 
-Hay `CORSMiddleware` abierto a todos los orígenes **solo para GET**: el panel de `/demo`
-corre en otro dominio y sin eso el `EventSource` del navegador no se puede ni conectar. Los
+Hay `CORSMiddleware` abierto a todos los orígenes **para GET y POST**: el panel de `/demo`
+corre en otro dominio y sin eso ni el `EventSource` ni el botón de reset funcionan. Los
 tres GET son públicos de todas formas —`/f/{id}` porque Twilio lo descarga, `/demo/eventos`
-porque solo entrega la conversación de `CURUBA_DEMO_WA`— y los webhooks son POST de Twilio,
-que no los llama un navegador.
+porque solo entrega la conversación de `CURUBA_DEMO_WA`—. El `POST` no le abre nada a los
+webhooks: a esos los protege la firma de Twilio, no el CORS, que de todas formas nunca
+impidió **mandar** un POST sino solo leer la respuesta.
 
 Campos del webhook: `From` (`whatsapp:+57...`), `Body`, `NumMedia`, `MediaUrl0`,
 `MediaContentType0`, `MessageSid`, `ProfileName`. Validar el header
