@@ -75,6 +75,18 @@ async def guardar_dato_caso(
     }
     if ruta == "esperar":
         respuesta["canales_supersalud"] = legal.SUPERSALUD_CANALES
+
+    # Va AL LADO de la ruta, no en su lugar: son cosas que se suman. Radicar un escrito
+    # no le quita a nadie el derecho al domicilio en 48 horas, y la constancia es la
+    # prueba de la que después va a depender ese mismo escrito.
+    mostrador = legal.accion_inmediata(campos)
+    if mostrador:
+        respuesta["accion_inmediata"] = mostrador
+        respuesta["nota_accion_inmediata"] = (
+            "Dile ESTO primero, antes de seguir con las preguntas. Si está en el "
+            "dispensador ahora mismo, es lo único que importa en este momento: son dos "
+            "minutos de pie y sin esa constancia el escrito que sigue llega sin prueba."
+        )
     return respuesta
 
 
@@ -140,15 +152,29 @@ async def generar_documento(ctx: RunContext[Deps], tipo: str) -> dict[str, Any]:
             ),
         }
 
+    # El `url` NO se le devuelve al modelo, y eso es deliberado. Cuando lo veía, leía el
+    # enlace como si fuera el entregable y le decía al paciente "te paso el link" — o
+    # peor, "no puedo mandarte archivos por aquí, solo el enlace", que es exactamente lo
+    # contrario de lo que pasa. El PDF ya viaja adjunto vía `ctx.deps.adjunto`, que lee
+    # `agent.responder()` al terminar la corrida.
+    #
+    # Si el envío con adjunto llegara a fallar, `main._procesar` reintenta él mismo
+    # pegando el enlace al final del texto. O sea que el modelo nunca necesita la URL:
+    # no dársela le quita la posibilidad de equivocarse con ella.
     return {
         "generado": legal.NOMBRES[tipo],
-        "url": url,
-        "se_manda_como_archivo": ctx.deps.adjunto is not None,
+        "se_adjunta_automaticamente": True,
         "marcadores": marcadores,
         "nota": (
-            "Léele los marcadores: son los espacios que quedaron en blanco y los tiene "
-            "que llenar a mano antes de radicar."
-            if marcadores
-            else "No quedaron espacios en blanco."
+            "El PDF YA VA ADJUNTO en este mismo mensaje de WhatsApp: sale solo, no "
+            "tienes que hacer nada más y no tienes ningún enlace que pegar. NUNCA le "
+            "digas que no puedes mandarle archivos por aquí, ni que la única forma es un "
+            "enlace, ni le pidas un correo: sí puedes y ya está saliendo. "
+            + (
+                "Léele los marcadores: son los espacios que quedaron en blanco y los "
+                "tiene que llenar a mano antes de radicar."
+                if marcadores
+                else "No quedaron espacios en blanco."
+            )
         ),
     }
