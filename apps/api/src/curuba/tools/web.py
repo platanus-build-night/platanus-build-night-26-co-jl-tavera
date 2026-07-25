@@ -218,7 +218,10 @@ async def identificar(nombre: str, usage: RunUsage | None = None) -> Identificac
     if not ident.fuentes:
         ident.confianza = "baja"
 
-    await db.guardar_cache_web(clave, ident.model_dump())
+    # Un "no lo identifiqué" no se cachea, por lo mismo que en precios_drogueria: puede
+    # haber sido un mal momento del buscador y no una marca que no existe.
+    if ident.principio_activo:
+        await db.guardar_cache_web(clave, ident.model_dump())
     return ident
 
 
@@ -266,5 +269,9 @@ async def precios_drogueria(nombre: str, usage: RunUsage | None = None) -> list[
             oferta.precio = None
         buenas.append(oferta)
 
-    await db.guardar_cache_web(clave, {"ofertas": [o.model_dump() for o in buenas]})
+    # Solo se cachea lo que encontró algo. Guardar un "no encontré" deja pegado por una
+    # semana lo que pudo ser un timeout o un mal día del buscador, y el paciente que
+    # vuelve a preguntar mañana recibe el mismo vacío sin que nadie haya vuelto a buscar.
+    if buenas:
+        await db.guardar_cache_web(clave, {"ofertas": [o.model_dump() for o in buenas]})
     return buenas
