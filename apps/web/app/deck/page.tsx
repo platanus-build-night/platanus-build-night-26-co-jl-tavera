@@ -280,10 +280,10 @@ const SLIDES: { fondo: string; nodo: React.ReactNode; pad?: string }[] = [
     fondo: "bg-curuba",
     pad: "px-5 py-2 sm:px-8",
     nodo: (
-      <div className="flex h-full flex-col items-center justify-center gap-6 lg:flex-row lg:justify-between lg:gap-10">
-        <div className="max-w-[34ch] lg:flex-1">
+      <div className="flex h-full flex-col items-center justify-center gap-6 lg:flex-row lg:justify-between lg:gap-8">
+        <div className="max-w-[54ch] lg:flex-1">
           <Rotulo>Qué hace</Rotulo>
-          <p className="mt-5 text-[clamp(1rem,min(2.1vw,3.4svh),1.9rem)] leading-tight text-monte">
+          <p className="mt-5 text-[clamp(1rem,min(2.6vw,4.4svh),2.1rem)] leading-tight text-monte">
             ¿Cuánto debería costar tu medicamento? ¿Y qué hacer si tu EPS no te lo entrega?
             Manda una foto de tu fórmula o del producto: te decimos si te toca pagarlo y
             cuánto, si está desabastecido, y te armamos el reclamo listo para radicar.
