@@ -118,12 +118,21 @@ def numero_demo() -> str:
     return _DEMO
 
 
+# Lo que el panel muestra en vez del número real. `/demo` se proyecta, y el wa_id de la
+# allowlist es el celular de una persona de verdad: no tiene por qué salir en pantalla ni
+# viajar por el SSE. Los dígitos en secuencia se leen como lo que son, un ejemplo.
+NUMERO_VITRINA = "+57 300 123 4567"
+
+
 def _bonito(wa_id: str) -> str:
-    """`whatsapp:+573001234567` → `+57 300 123 4567`, para el encabezado del chat."""
+    """Cualquier celular → `+57 300 123 4567`, para el encabezado del chat.
+
+    NO formatea el número real: lo reemplaza. Lo único que se conserva es que haya
+    número —un wa_id que no es numérico, como el `local` del REPL, sale intacto para
+    que se siga viendo de dónde vino la conversación.
+    """
     n = wa_id.removeprefix("whatsapp:")
-    if n.startswith("+57") and len(n) == 13:
-        return f"+57 {n[3:6]} {n[6:9]} {n[9:]}"
-    return n
+    return NUMERO_VITRINA if n.lstrip("+").isdigit() else n
 
 
 def _compacto(valor: Any, limite: int) -> str:
